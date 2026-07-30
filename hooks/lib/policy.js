@@ -1,0 +1,28 @@
+const fs = require('fs');
+const path = require('path');
+const { codexHome } = require('./dependencies');
+
+function buildPolicy() {
+  return [
+    'PONYTAIL MODE ACTIVE - level: full',
+    fullMode(fs.readFileSync(path.join(codexHome, 'skills', 'ponytail', 'SKILL.md'), 'utf8')),
+    'CAVEMAN MODE ACTIVE - level: full',
+    fullMode(fs.readFileSync(path.join(codexHome, 'skills', 'caveman', 'SKILL.md'), 'utf8')),
+    fs.readFileSync(path.join(codexHome, 'RTK.md'), 'utf8'),
+  ].join('\n\n');
+}
+
+function fullMode(skill) {
+  return skill.replace(/^---[\s\S]*?---\s*/, '').split(/\r?\n/).filter((line) => {
+    const table = line.match(/^\|\s*\*\*(.+?)\*\*\s*\|/);
+    if (table && isMode(table[1])) return table[1].trim().toLowerCase() === 'full';
+    const example = line.match(/^-\s*([^:]+):\s*"/);
+    return !example || !isMode(example[1]) || example[1].trim().toLowerCase() === 'full';
+  }).join('\n');
+}
+
+function isMode(value) {
+  return /^(lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra)$/.test(value.trim().toLowerCase());
+}
+
+module.exports = { buildPolicy, fullMode };
