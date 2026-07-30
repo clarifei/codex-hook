@@ -21,7 +21,7 @@ async function syncSkills(codexHome) {
     bytes: await bytes(file.skill.repository, file.skill.ref, file.path),
   })));
   return downloads.map((file) => {
-    const target = path.join(codexHome, 'skills', file.skill.target, file.relative);
+    const target = path.join(codexHome, 'skills', file.relative);
     return { action: installBytes(target, file.bytes), target };
   });
 }

@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { disablePonytail } = require('./lib/config');
-const { copyTree, installFile } = require('./lib/files');
+const { copyTree, installBytes, installFile } = require('./lib/files');
 const { ensureRtk } = require('./lib/rtk');
 const skills = require('./skill-manifest');
 const { syncSkills } = require('./sync-skills');
 
 if (process.argv[2] === '--self-test') {
-  const names = skills.map((skill) => skill.target).sort().join(',');
-  if (names !== 'caveman,caveman-commit,caveman-compress,ponytail,ponytail-audit,ponytail-review') {
+  const sources = skills.map((skill) => `${skill.repository}:${skill.source}`).sort().join(',');
+  if (sources !== 'DietrichGebert/ponytail:skills,JuliusBrussee/caveman:skills') {
     throw new Error('Skill manifest failed');
+  }
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hook-'));
+  const target = path.join(directory, 'file');
+  try {
+    if (installBytes(target, Buffer.from('one')) !== 'replace' || installBytes(target, Buffer.from('one')) !== 'skip' || installBytes(target, Buffer.from('two')) !== 'replace') {
+      throw new Error('Hash update failed');
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
   }
   console.log('ok');
   process.exit(0);
