@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { disablePonytail } = require('./lib/config');
-const { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob } = require('./lib/files');
-const { ensureRtk } = require('./lib/rtk');
-const skills = require('./skill-manifest');
-const { syncSkills } = require('./sync-skills');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import readline from 'node:readline';
+import { fileURLToPath } from 'node:url';
+import { disablePonytail } from './lib/config.mjs';
+import { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob } from './lib/files.mjs';
+import { ensureRtk } from './lib/rtk.mjs';
+import skills from './skill-manifest.mjs';
+import { syncSkills } from './sync-skills.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (process.argv[2] === '--self-test') {
   const sources = skills.map((skill) => `${skill.repository}:${skill.source}`).sort().join(',');
@@ -80,7 +84,6 @@ function printSummary({ codexHome, rtkAction, skills, files, ponytailChanged }) 
 
 function waitForExit() {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return Promise.resolve();
-  const readline = require('readline');
   return new Promise((resolve) => {
     const input = readline.createInterface({ input: process.stdin, output: process.stdout });
     input.question('\nPress Enter to close.', () => {

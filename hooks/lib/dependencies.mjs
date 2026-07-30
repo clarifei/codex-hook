@@ -1,8 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
-const codexHome = path.resolve(__dirname, '..', '..');
+const codexHome = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function missingDependencies() {
   return [
@@ -21,4 +22,4 @@ function rtkInstalled() {
   return spawnSync(process.platform === 'win32' ? 'rtk.exe' : 'rtk', ['--version'], { stdio: 'ignore' }).status === 0;
 }
 
-module.exports = { codexHome, missingDependencies, requiresRtk };
+export { codexHome, missingDependencies, requiresRtk };

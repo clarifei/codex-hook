@@ -16,4 +16,4 @@ function readEvent(callback) {
   process.stdin.on('error', () => process.exit(0));
 }
 
-module.exports = { output, readEvent };
+export { output, readEvent };

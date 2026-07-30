@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 function disablePonytail(configPath) {
   const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
@@ -32,4 +32,4 @@ function disable(text) {
   return { changed: true, text: text.slice(0, start) + updated + text.slice(end) };
 }
 
-module.exports = { disable, disablePonytail };
+export { disable, disablePonytail };

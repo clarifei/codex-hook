@@ -16,4 +16,4 @@ async function bytes(repository, ref, file) {
   return Buffer.from(await response.arrayBuffer());
 }
 
-module.exports = { bytes, tree };
+export { bytes, tree };

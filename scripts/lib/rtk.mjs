@@ -1,4 +1,4 @@
-const { spawnSync } = require('child_process');
+import { spawnSync } from 'node:child_process';
 
 const binary = process.platform === 'win32' ? 'rtk.exe' : 'rtk';
 const cargo = process.platform === 'win32' ? 'cargo.exe' : 'cargo';
@@ -15,4 +15,4 @@ function ensureRtk() {
   return 'install rtk';
 }
 
-module.exports = { ensureRtk };
+export { ensureRtk };

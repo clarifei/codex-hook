@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = require('path');
-const { codexHome } = require('./dependencies');
+import fs from 'node:fs';
+import path from 'node:path';
+import { codexHome } from './dependencies.mjs';
 
 function buildPolicy() {
   return [
@@ -25,4 +25,4 @@ function isMode(value) {
   return /^(lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra)$/.test(value.trim().toLowerCase());
 }
 
-module.exports = { buildPolicy, fullMode };
+export { buildPolicy, fullMode };

@@ -1,7 +1,7 @@
-const path = require('path');
-const { installBytes, sameGitBlob } = require('./lib/files');
-const { bytes, tree } = require('./lib/github');
-const skills = require('./skill-manifest');
+import path from 'node:path';
+import { installBytes, sameGitBlob } from './lib/files.mjs';
+import { bytes, tree } from './lib/github.mjs';
+import skills from './skill-manifest.mjs';
 
 async function syncSkills(codexHome) {
   const treeRequests = new Map();
@@ -32,4 +32,4 @@ async function syncSkills(codexHome) {
   });
 }
 
-module.exports = { syncSkills };
+export { syncSkills };

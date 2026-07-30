@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { disable, disablePonytail } = require('./lib/config');
+import { disable, disablePonytail } from './lib/config.mjs';
 
 if (process.argv[2] === '--self-test') {
   const once = disable('[plugins."ponytail@ponytail"]\nenabled = true\n');

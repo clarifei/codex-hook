@@ -9,7 +9,7 @@ try {
   New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
   Invoke-WebRequest -Uri $url -OutFile $archive
   Expand-Archive -LiteralPath $archive -DestinationPath $tempDir
-  & node (Join-Path $tempDir 'codex-hook-main\scripts\install.js') @args
+  & node (Join-Path $tempDir 'codex-hook-main\scripts\install.mjs') @args
   $code = $LASTEXITCODE
 } finally {
   Remove-Item -LiteralPath $tempDir -Force -Recurse -ErrorAction SilentlyContinue

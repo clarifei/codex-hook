@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const { missingDependencies, requiresRtk } = require('./lib/dependencies');
-const { buildPolicy, fullMode } = require('./lib/policy');
-const { output, readEvent } = require('./lib/protocol');
+import { missingDependencies, requiresRtk } from './lib/dependencies.mjs';
+import { buildPolicy, fullMode } from './lib/policy.mjs';
+import { output, readEvent } from './lib/protocol.mjs';
 
 if (process.argv[2] === '--self-test') {
   if (!requiresRtk('git status') || requiresRtk('rtk git status') || requiresRtk('  RTK cmd /c dir')) {

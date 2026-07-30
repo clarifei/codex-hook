@@ -7,8 +7,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.js\"",
-            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.js')",
+            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.mjs\"",
+            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.mjs')",
             "timeout": 5,
             "additionalContextLimit": 900,
             "statusMessage": "loading workstyle policy"
@@ -21,8 +21,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.js\"",
-            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.js')",
+            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.mjs\"",
+            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.mjs')",
             "timeout": 5,
             "additionalContextLimit": 900,
             "statusMessage": "loading workstyle policy"
@@ -36,8 +36,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.js\"",
-            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.js')",
+            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.mjs\"",
+            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.mjs')",
             "timeout": 5
           }
         ]

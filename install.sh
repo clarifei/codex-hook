@@ -16,4 +16,4 @@ else
   exit 1
 fi
 
-node "$temp_dir/scripts/install.js" "$@"
+node "$temp_dir/scripts/install.mjs" "$@"
