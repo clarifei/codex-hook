@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -94,26 +93,13 @@ function rtkInstalled() {
 }
 
 function ponytailSkill() {
-  if (process.env.PONYTAIL_SKILL_PATH) {
-    return fs.existsSync(process.env.PONYTAIL_SKILL_PATH) ? process.env.PONYTAIL_SKILL_PATH : null;
-  }
-  const root = path.join(codexHome, 'plugins', 'cache', 'ponytail', 'ponytail');
-  if (!fs.existsSync(root)) return null;
-  return fs.readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(root, entry.name, 'skills', 'ponytail', 'SKILL.md'))
-    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-    .find((file) => fs.existsSync(file)) || null;
+  const file = path.join(codexHome, 'skills', 'ponytail', 'SKILL.md');
+  return fs.existsSync(file) ? file : null;
 }
 
 function cavemanSkill() {
-  if (process.env.CAVEMAN_SKILL_PATH) {
-    return fs.existsSync(process.env.CAVEMAN_SKILL_PATH) ? process.env.CAVEMAN_SKILL_PATH : null;
-  }
-  return [
-    path.join(codexHome, 'skills', 'caveman', 'SKILL.md'),
-    path.join(os.homedir(), '.agents', 'skills', 'caveman', 'SKILL.md'),
-  ].find((file) => fs.existsSync(file)) || null;
+  const file = path.join(codexHome, 'skills', 'caveman', 'SKILL.md');
+  return fs.existsSync(file) ? file : null;
 }
 
 function fullMode(skill) {
