@@ -1,0 +1,47 @@
+{
+  "description": "unified ponytail, caveman, and rtk policy.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.js\"",
+            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.js')",
+            "timeout": 5,
+            "additionalContextLimit": 900,
+            "statusMessage": "loading workstyle policy"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.js\"",
+            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.js')",
+            "timeout": 5,
+            "additionalContextLimit": 900,
+            "statusMessage": "loading workstyle policy"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.js\"",
+            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.js')",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
