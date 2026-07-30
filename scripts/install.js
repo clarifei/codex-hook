@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { disablePonytail } = require('./lib/config');
-const { copyTree, installBytes, installFile } = require('./lib/files');
+const { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob } = require('./lib/files');
 const { ensureRtk } = require('./lib/rtk');
 const skills = require('./skill-manifest');
 const { syncSkills } = require('./sync-skills');
@@ -14,10 +14,13 @@ if (process.argv[2] === '--self-test') {
   if (sources !== 'DietrichGebert/ponytail:skills,JuliusBrussee/caveman:skills') {
     throw new Error('Skill manifest failed');
   }
+  const summary = summarize([{ action: 'replace' }, { action: 'skip' }]);
+  if (summary.replace !== 1 || summary.skip !== 1) throw new Error('Install summary failed');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hook-'));
   const target = path.join(directory, 'file');
   try {
-    if (installBytes(target, Buffer.from('one')) !== 'replace' || installBytes(target, Buffer.from('one')) !== 'skip' || installBytes(target, Buffer.from('two')) !== 'replace') {
+    const source = Buffer.from('two');
+    if (installBytes(target, Buffer.from('one')) !== 'replace' || installBytes(target, Buffer.from('one')) !== 'skip' || installBytes(target, source) !== 'replace' || !sameGitBlob(target, gitBlobHash(source))) {
       throw new Error('Hash update failed');
     }
   } finally {
@@ -35,14 +38,54 @@ main().catch((error) => {
 async function main() {
   const source = path.resolve(__dirname, '..');
   const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
-  console.log(ensureRtk());
-  for (const result of await syncSkills(codexHome)) console.log(`${result.action} ${result.target}`);
-  const report = (action, target) => console.log(`${action} ${target}`);
+  const rtkAction = ensureRtk();
+  const skillResults = await syncSkills(codexHome);
+  const fileResults = [];
+  const report = (action, target) => fileResults.push({ action, target });
   copyTree(path.join(source, 'hooks'), path.join(codexHome, 'hooks'), report);
   for (const file of ['hooks.json', 'RTK.md']) {
     const target = path.join(codexHome, file);
     report(installFile(path.join(source, file), target), target);
   }
-  console.log(disablePonytail(path.join(codexHome, 'config.toml')) ? 'disable ponytail hook' : 'skip ponytail hook');
-  console.log('installed. trust the hook in /hooks, then start a new session.');
+  const ponytailChanged = disablePonytail(path.join(codexHome, 'config.toml'));
+  printSummary({
+    codexHome,
+    rtkAction,
+    skills: summarize(skillResults),
+    files: summarize(fileResults),
+    ponytailChanged,
+  });
+  await waitForExit();
+}
+
+function summarize(results) {
+  return results.reduce((summary, result) => {
+    if (result.action === 'replace') summary.replace++;
+    if (result.action === 'skip') summary.skip++;
+    return summary;
+  }, { replace: 0, skip: 0 });
+}
+
+function printSummary({ codexHome, rtkAction, skills, files, ponytailChanged }) {
+  console.log('\ncodex-hook install complete');
+  console.log(`  rtk      ${rtkAction === 'install rtk' ? 'installed' : 'already installed'}`);
+  console.log(`  skills   ${skills.replace} changed, ${skills.skip} unchanged`);
+  console.log(`  files    ${files.replace} changed, ${files.skip} unchanged`);
+  console.log(`  config   ${ponytailChanged ? 'ponytail hook disabled' : 'ponytail hook already disabled'}`);
+  console.log(`  home     ${codexHome}`);
+  console.log('\nNext steps');
+  console.log(`  1. Trust the hook in ${path.join(codexHome, 'hooks')}.`);
+  console.log('  2. Start a new Codex session.');
+}
+
+function waitForExit() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return Promise.resolve();
+  const readline = require('readline');
+  return new Promise((resolve) => {
+    const input = readline.createInterface({ input: process.stdin, output: process.stdout });
+    input.question('\nPress Enter to close.', () => {
+      input.close();
+      resolve();
+    });
+  });
 }

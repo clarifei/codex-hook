@@ -2,13 +2,33 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-function hash(bytes) {
-  return crypto.createHash('sha256').update(bytes).digest('hex');
+function gitBlobHash(bytes) {
+  const result = crypto.createHash('sha1');
+  result.update(`blob ${bytes.length}\0`);
+  result.update(bytes);
+  return result.digest('hex');
+}
+
+function sameGitBlob(target, expected) {
+  let bytes;
+  try {
+    bytes = fs.readFileSync(target);
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+  return gitBlobHash(bytes) === expected;
 }
 
 function installBytes(target, bytes) {
+  let current;
+  try {
+    current = fs.readFileSync(target);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  if (current && current.equals(bytes)) return 'skip';
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  if (fs.existsSync(target) && hash(fs.readFileSync(target)) === hash(bytes)) return 'skip';
   fs.writeFileSync(target, bytes);
   return 'replace';
 }
@@ -26,4 +46,4 @@ function copyTree(source, target, report) {
   }
 }
 
-module.exports = { copyTree, installBytes, installFile };
+module.exports = { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob };

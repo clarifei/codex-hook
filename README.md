@@ -16,8 +16,8 @@ windows:
 irm https://raw.githubusercontent.com/clarifei/codex-hook/main/install.ps1 | iex
 ```
 
-then trust hook in `/hooks` and start a new session.
+the installer prints a summary and next steps. In an interactive terminal, press Enter after reading it; then trust the hook in `/hooks` and start a new session.
 
 skills: every current caveman and ponytail skill, including review, audit, help, debt, gain, compress, and cavecrew.
 
-each upstream file uses sha-256. same hash skips. different hash replaces. ponytail bundled hook stays disabled; this hook owns startup.
+unchanged upstream files are skipped by their source blob hash. different files replace the local copy. ponytail bundled hook stays disabled; this hook owns startup.
