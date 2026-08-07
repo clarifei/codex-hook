@@ -1,5 +1,5 @@
 {
-  "description": "unified ponytail, caveman, and rtk policy.",
+  "description": "unified ponytail, beeline or caveman, and rtk policy.",
   "hooks": {
     "SessionStart": [
       {

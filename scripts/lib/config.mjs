@@ -11,6 +11,38 @@ function disablePonytail(configPath) {
   return result.changed;
 }
 
+function ensureWigolo(configPath) {
+  const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  const header = '[mcp_servers.wigolo]';
+  const desiredCommand = 'command = "npx"';
+  const desiredArgs = 'args = ["-y", "wigolo"]';
+  const start = original.indexOf(header);
+  if (start < 0) {
+    const separator = original && !original.endsWith(newline) ? newline : '';
+    const text = `${original}${separator}${header}${newline}${desiredCommand}${newline}${desiredArgs}${newline}`;
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, text, 'utf8');
+    return true;
+  }
+
+  const afterHeader = start + header.length;
+  const boundary = original.slice(afterHeader).match(/\r?\n\[/);
+  const end = boundary ? afterHeader + boundary.index : original.length;
+  const section = original.slice(start, end);
+  const command = section.match(/^command\s*=\s*.+$/m);
+  const args = section.match(/^args\s*=\s*.+$/m);
+  if (command && args && command[0].trim() === desiredCommand && args[0].trim() === desiredArgs) return false;
+  let updated = command
+    ? section.replace(/^command\s*=\s*.+$/m, desiredCommand)
+    : `${section}${section.endsWith(newline) ? '' : newline}${desiredCommand}`;
+  updated = args
+    ? updated.replace(/^args\s*=\s*.+$/m, desiredArgs)
+    : `${updated}${updated.endsWith(newline) ? '' : newline}${desiredArgs}`;
+  fs.writeFileSync(configPath, original.slice(0, start) + updated + original.slice(end), 'utf8');
+  return true;
+}
+
 function disable(text) {
   const header = '[plugins."ponytail@ponytail"]';
   const newline = text.includes('\r\n') ? '\r\n' : '\n';
@@ -32,4 +64,4 @@ function disable(text) {
   return { changed: true, text: text.slice(0, start) + updated + text.slice(end) };
 }
 
-export { disable, disablePonytail };
+export { disable, disablePonytail, ensureWigolo };

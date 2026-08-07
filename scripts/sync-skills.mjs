@@ -1,9 +1,10 @@
 import path from 'node:path';
 import { installBytes, sameGitBlob } from './lib/files.mjs';
 import { bytes, tree } from './lib/github.mjs';
-import skills from './skill-manifest.mjs';
+import { skillsFor } from './skill-manifest.mjs';
 
-async function syncSkills(codexHome) {
+async function syncSkills(codexHome, style = 'beeline') {
+  const skills = skillsFor(style);
   const treeRequests = new Map();
   for (const skill of skills) {
     const key = `${skill.repository}@${skill.ref}`;
