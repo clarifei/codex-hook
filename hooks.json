@@ -1,5 +1,5 @@
 {
-  "description": "unified ponytail, beeline or caveman, and rtk policy.",
+  "description": "concise ponytail, selected style, Wigolo, and RTK policy.",
   "hooks": {
     "SessionStart": [
       {

@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 
 import { missingDependencies, requiresRtk } from './lib/dependencies.mjs';
-import { buildPolicy, fullMode } from './lib/policy.mjs';
+import { buildPolicy, policyFor } from './lib/policy.mjs';
 import { output, readEvent } from './lib/protocol.mjs';
 
 if (process.argv[2] === '--self-test') {
   if (!requiresRtk('git status') || requiresRtk('rtk git status') || requiresRtk('  RTK cmd /c dir')) {
     throw new Error('RTK guard failed');
   }
-  if (fullMode('| **lite** | x |\n| **full** | y |\n| **ultra** | z |').includes('lite')) {
-    throw new Error('Mode filter failed');
+  for (const style of ['beeline', 'caveman']) {
+    const policy = policyFor(style);
+    const other = style === 'beeline' ? 'caveman' : 'beeline';
+    if (policy.length > 2000 || !policy.includes(`\`$${style}\``) || policy.includes(`\`$${other}\``)
+      || !policy.includes('/wigolo/SKILL.md') || !policy.includes('Prefix every shell command with \`rtk\`')) {
+      throw new Error(`${style} policy failed`);
+    }
   }
   console.log('ok');
   process.exit(0);

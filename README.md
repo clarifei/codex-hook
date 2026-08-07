@@ -32,4 +32,4 @@ skills: every current selected-style, ponytail, and Wigolo skill. The installer 
 
 Wigolo requires Node 20-25 for its current `better-sqlite3` dependency. Verify the setup with `npx wigolo doctor`; Node 26 is not supported by that native dependency yet.
 
-unchanged upstream files are skipped by their source blob hash. different files replace the local copy. ponytail bundled hook stays disabled; this hook owns startup.
+unchanged upstream files are skipped by their source blob hash. different files replace the local copy. startup activates the authoritative Ponytail and selected-style skills without copying their contents into hook context. ponytail bundled hook stays disabled; this hook owns startup.
