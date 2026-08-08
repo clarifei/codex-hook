@@ -9,18 +9,33 @@ import { disablePonytail, ensureWigolo } from './lib/config.mjs';
 import { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob } from './lib/files.mjs';
 import { ensureRtk } from './lib/rtk.mjs';
 import { skillsFor } from './skill-manifest.mjs';
-import { syncSkills } from './sync-skills.mjs';
+import { excluded, reserve, syncSkills } from './sync-skills.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (process.argv[2] === '--self-test') {
   const expected = {
-    beeline: 'DietrichGebert/ponytail:skills,KnockOutEZ/wigolo:skills,iceHub82/beeline:skills',
-    caveman: 'DietrichGebert/ponytail:skills,JuliusBrussee/caveman:skills,KnockOutEZ/wigolo:skills',
+    beeline: 'DietrichGebert/ponytail:skills,KnockOutEZ/wigolo:skills,emilkowalski/skills:skills,iceHub82/beeline:skills,mattpocock/skills:skills/engineering,mattpocock/skills:skills/productivity',
+    caveman: 'DietrichGebert/ponytail:skills,JuliusBrussee/caveman:skills,KnockOutEZ/wigolo:skills,emilkowalski/skills:skills,mattpocock/skills:skills/engineering,mattpocock/skills:skills/productivity',
   };
   for (const style of Object.keys(expected)) {
     const sources = skillsFor(style).map((skill) => `${skill.repository}:${skill.source}`).sort().join(',');
     if (sources !== expected[style]) throw new Error(`${style} skill manifest failed`);
+  }
+  const emil = skillsFor().find((skill) => skill.repository === 'emilkowalski/skills');
+  if (!excluded(emil, 'prototype/SKILL.md') || excluded(emil, 'animate/SKILL.md')) {
+    throw new Error('Skill exclusion failed');
+  }
+  const matt = skillsFor().filter((skill) => skill.repository === 'mattpocock/skills');
+  if (matt.length !== 2 || matt.some((skill) => !excluded(skill, 'README.md'))) {
+    throw new Error('Matt category exclusion failed');
+  }
+  const targets = new Set(['duplicate']);
+  try {
+    reserve(targets, 'duplicate');
+    throw new Error('Duplicate target check failed');
+  } catch (error) {
+    if (error.message !== 'duplicate skill target: duplicate') throw error;
   }
   const summary = summarize([{ action: 'replace' }, { action: 'skip' }]);
   if (summary.replace !== 1 || summary.skip !== 1 || summary.remove !== 0) throw new Error('Install summary failed');

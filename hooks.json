@@ -1,5 +1,5 @@
 {
-  "description": "concise ponytail, selected style, Wigolo, and RTK policy.",
+  "description": "concise Ponytail, selected style, Codebase Memory, Wigolo, and RTK policy.",
   "hooks": {
     "SessionStart": [
       {

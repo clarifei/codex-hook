@@ -14,12 +14,16 @@ async function syncSkills(codexHome, style = 'beeline') {
     [...treeRequests].map(async ([key, request]) => [key, await request]),
   ));
   const files = [];
+  const targets = new Set();
   for (const skill of skills) {
     const key = `${skill.repository}@${skill.ref}`;
     const entries = trees.get(key);
     for (const entry of entries) {
       if (!entry.path.startsWith(`${skill.source}/`)) continue;
-      files.push({ skill, path: entry.path, relative: entry.path.slice(skill.source.length + 1) });
+      const relative = entry.path.slice(skill.source.length + 1);
+      if (excluded(skill, relative)) continue;
+      reserve(targets, relative);
+      files.push({ skill, path: entry.path, relative });
     }
   }
 
@@ -33,4 +37,13 @@ async function syncSkills(codexHome, style = 'beeline') {
   });
 }
 
-export { syncSkills };
+function excluded(skill, relative) {
+  return Boolean(skill.exclude?.some((name) => relative === name || relative.startsWith(`${name}/`)));
+}
+
+function reserve(targets, relative) {
+  if (targets.has(relative)) throw new Error(`duplicate skill target: ${relative}`);
+  targets.add(relative);
+}
+
+export { excluded, reserve, syncSkills };

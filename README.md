@@ -2,7 +2,7 @@
 
 one global hook. ponytail full, beeline full by default (caveman optional), rtk enforced.
 
-needs `node` and network. installer gets rtk from `rtk-ai/rtk`, then syncs every skill from both upstream repos direct from the source files.
+needs `node` and network. installer gets rtk from `rtk-ai/rtk`, then syncs supported skills from every upstream repository direct from the source files.
 
 linux:
 
@@ -28,8 +28,8 @@ the installer accepts `beeline` (default) or `caveman`; it removes the other ski
 ./install.ps1 caveman
 ```
 
-skills: every current selected-style, ponytail, and Wigolo skill. The installer also configures Wigolo MCP as `npx -y wigolo`, alongside the local `codebase-memory` skill (https://github.com/DeusData/codebase-memory-mcp).
+skills: every current selected-style, Ponytail, Wigolo, and stable Matt Pocock engineering/productivity skill, plus Emil Kowalski skills except `prototype`. Emil's `prototype` is skipped because Matt's skill owns the same name. The installer also configures Wigolo MCP as `npx -y wigolo`, alongside the local `codebase-memory` skill (https://github.com/DeusData/codebase-memory-mcp).
 
 Wigolo requires Node 20-25 for its current `better-sqlite3` dependency. Verify the setup with `npx wigolo doctor`; Node 26 is not supported by that native dependency yet.
 
-unchanged upstream files are skipped by their source blob hash. different files replace the local copy. startup activates the authoritative Ponytail and selected-style skills without copying their contents into hook context. ponytail bundled hook stays disabled; this hook owns startup.
+unchanged upstream files are skipped by their source blob hash. different files replace the local copy. startup policy is limited to Ponytail, the selected Beeline/Caveman style, RTK, Codebase Memory MCP, and Wigolo; the Matt Pocock and Emil Kowalski collections are installed without being added to the hook. ponytail bundled hook stays disabled; this hook owns startup.

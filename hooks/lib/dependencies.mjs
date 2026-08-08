@@ -11,6 +11,7 @@ function missingDependencies() {
     !rtkInstalled() && 'rtk',
     !fs.existsSync(path.join(codexHome, 'skills', 'ponytail', 'SKILL.md')) && 'ponytail skill',
     !installedStyle(codexHome) && 'exactly one beeline or caveman skill',
+    !fs.existsSync(path.join(codexHome, 'skills', 'codebase-memory', 'SKILL.md')) && 'codebase-memory skill',
     !fs.existsSync(path.join(codexHome, 'skills', 'wigolo', 'SKILL.md')) && 'wigolo skill',
     !wigoloMcpConfigured() && 'wigolo MCP configuration',
     !fs.existsSync(path.join(codexHome, 'RTK.md')) && 'RTK.md',

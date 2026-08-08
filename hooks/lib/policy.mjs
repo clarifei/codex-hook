@@ -8,6 +8,8 @@ function policyFor(style) {
   return `WORKSTYLE ACTIVE. This hook explicitly invokes \`$ponytail\` and \`$${style}\` at level \`full\`.
 Before acting, read \`${skill('ponytail')}\` and \`${skill(style)}\` completely unless each full file is already in the current context. Treat them as authoritative and follow every rule, boundary, precedence, persistence, and composition instruction. Do not load the unselected style.
 
+CODEBASE MEMORY MCP ACTIVE. For repository work, read \`${skill('codebase-memory')}\` unless already in context. Use the configured codebase-memory-mcp as the primary source for code discovery and impact analysis.
+
 WIGOLO MCP ACTIVE. For web work, read \`${skill('wigolo')}\` and the matching installed Wigolo subskill unless already in context. Use the configured Wigolo MCP for every web operation and follow its cache-first routing; do not load unrelated subskills.
 
 RTK ACTIVE. Read \`${path.join(codexHome, 'RTK.md')}\` unless it is already in the current context. Prefix every shell command with \`rtk\`.`;

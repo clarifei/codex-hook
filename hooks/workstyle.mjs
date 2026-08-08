@@ -12,7 +12,8 @@ if (process.argv[2] === '--self-test') {
     const policy = policyFor(style);
     const other = style === 'beeline' ? 'caveman' : 'beeline';
     if (policy.length > 2000 || !policy.includes(`\`$${style}\``) || policy.includes(`\`$${other}\``)
-      || !policy.includes('/wigolo/SKILL.md') || !policy.includes('Prefix every shell command with \`rtk\`')) {
+      || !policy.includes('/codebase-memory/SKILL.md') || !policy.includes('/wigolo/SKILL.md')
+      || !policy.includes('Prefix every shell command with \`rtk\`')) {
       throw new Error(`${style} policy failed`);
     }
   }
