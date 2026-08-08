@@ -2,7 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { type InstallAction, installBytes, sameGitBlob } from './lib/files.ts';
 import { bytes, tree, type TreeEntry } from './lib/github.ts';
-import { type InstallSelection, skillsFor, type SkillSource, type Workstyle } from './skill-manifest.ts';
+import {
+  type InstallSelection,
+  isWorkstyle,
+  normalizeOptional,
+  skillsFor,
+  type SkillSource,
+  type Workstyle,
+} from './skill-manifest.ts';
 
 type ManagedState = {
   version?: number;
@@ -23,6 +30,7 @@ type SyncFile = {
 async function syncSkills(
   codexHome: string,
   selection: Partial<InstallSelection> | Workstyle = {},
+  options: { install?: boolean } = {},
 ): Promise<ManagedResult[]> {
   const { style, optional } = typeof selection === 'string' ? { style: selection, optional: [] } : {
     style: selection.style || 'caveman',
@@ -60,17 +68,19 @@ async function syncSkills(
     files.map((file) => [file.relative, file.sha]),
   );
   const removed = pruneManaged(codexHome, readState(statePath).files, desired);
-  const downloads = await Promise.all(files.map(async (file) => {
-    const target = targetFor(codexHome, file.relative);
-    if (sameGitBlob(target, file.sha)) {
-      return { ...file, action: 'skip' as const, target };
-    }
-    return {
-      ...file,
-      bytes: await bytes(file.skill.repository, file.skill.ref, file.path),
-      target,
-    };
-  }));
+  const downloads = options.install === false
+    ? files.map((file) => ({ ...file, action: 'skip' as const, target: targetFor(codexHome, file.relative) }))
+    : await Promise.all(files.map(async (file) => {
+      const target = targetFor(codexHome, file.relative);
+      if (sameGitBlob(target, file.sha)) {
+        return { ...file, action: 'skip' as const, target };
+      }
+      return {
+        ...file,
+        bytes: await bytes(file.skill.repository, file.skill.ref, file.path),
+        target,
+      };
+    }));
   const installed: ManagedResult[] = downloads.map((file) => ({
     action: 'action' in file ? file.action : installBytes(file.target, file.bytes),
     target: file.target,
@@ -82,6 +92,22 @@ async function syncSkills(
     files: desired,
   });
   return [...installed, ...removed];
+}
+
+function uninstallSkills(
+  codexHome: string,
+  ids: readonly string[],
+): Promise<ManagedResult[]> {
+  const statePath = path.join(codexHome, '.codex-hook', 'skills.json');
+  const state = readState(statePath);
+  const requested = new Set(normalizeOptional(ids));
+  const optional = normalizeOptional(state.optional || [])
+    .filter((id) => !requested.has(id));
+  return syncSkills(
+    codexHome,
+    { style: isWorkstyle(state.style) ? state.style : 'caveman', optional },
+    { install: false },
+  );
 }
 
 function targetFor(codexHome: string, relative: string) {
@@ -163,5 +189,5 @@ function reserve(targets: Set<string>, relative: string) {
   targets.add(relative);
 }
 
-export { excluded, pruneManaged, readState, reserve, syncSkills, targetFor, writeState };
+export { excluded, pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState };
 export type { ManagedResult, ManagedState };

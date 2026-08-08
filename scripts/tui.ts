@@ -15,11 +15,13 @@ import {
   normalizeOptional,
   type OptionalSkillGroup,
   optionalSkillGroups,
+  optionalSkills,
   workstyles,
 } from './skill-manifest.ts';
 
 const runtimeArgs = process.argv.slice(2);
 const INSTALL = Symbol('install');
+const UNINSTALL = Symbol('uninstall');
 const CANCEL = Symbol('cancel');
 const BACK = Symbol('back');
 const cancelOption: SelectOption = {
@@ -45,8 +47,11 @@ function installMenu(
 ): Promise<InstallSelection | null> {
   const selected = new Set(normalizeOptional(defaults.optional));
   let style = defaults.style;
-  let stage: 'style' | 'groups' | 'skills' = 'style';
+  let stage: 'style' | 'groups' | 'skills' | 'uninstall' = 'style';
   let activeGroup: OptionalSkillGroup | null = null;
+  const installed = new Set(defaults.installed ?? []);
+  const uninstallSelected = new Set<string>();
+  for (const id of installed) selected.add(id);
   let finished = false;
   const foreground = RGBA.defaultForeground();
   const background = RGBA.defaultBackground();
@@ -165,7 +170,7 @@ function installMenu(
       subtitle.content = 'Step 2 of 2';
       heading.content = 'Optional skill collections';
       summary.content = selectionSummary(style, selected);
-      setMenu(optionalOptions(selected), 0);
+      setMenu(optionalOptions(selected, installed), 0);
     };
 
     const showSkills = (group: OptionalSkillGroup) => {
@@ -173,7 +178,16 @@ function installMenu(
       activeGroup = group;
       subtitle.content = 'Step 2 of 2';
       heading.content = `${group.label} skills`;
-      setMenu(skillOptions(group, selected), 0);
+      setMenu(skillOptions(group, selected, installed), 0);
+    };
+
+    const showUninstall = () => {
+      stage = 'uninstall';
+      activeGroup = null;
+      subtitle.content = 'Installed skills';
+      heading.content = 'Uninstall installed skills';
+      summary.content = `${uninstallSelected.size} marked for removal`;
+      setMenu(uninstallOptions(installed, uninstallSelected), 0);
     };
 
     const toggleOptional = (index: number, option: SelectOption | null) => {
@@ -186,7 +200,14 @@ function installMenu(
         }
         toggle(selected, group.skills[0].id);
         summary.content = selectionSummary(style, selected);
-        setMenu(optionalOptions(selected), index);
+        setMenu(optionalOptions(selected, installed), index);
+        return;
+      }
+      if (stage === 'uninstall') {
+        if (typeof option?.value !== 'string' || !installed.has(option.value)) return;
+        toggle(uninstallSelected, option.value);
+        summary.content = `${uninstallSelected.size} marked for removal`;
+        setMenu(uninstallOptions(installed, uninstallSelected), index);
         return;
       }
       if (stage !== 'skills' || !activeGroup) return;
@@ -194,7 +215,7 @@ function installMenu(
       if (!skill) return;
       toggle(selected, skill.id);
       summary.content = selectionSummary(style, selected);
-      setMenu(skillOptions(activeGroup, selected), index);
+      setMenu(skillOptions(activeGroup, selected, installed), index);
     };
 
     menu.on(SelectRenderableEvents.SELECTION_CHANGED, (_index: number, option: SelectOption | null) => {
@@ -220,6 +241,18 @@ function installMenu(
         finish({ style, optional: [...selected].sort() });
         return;
       }
+      if (option.value === UNINSTALL) {
+        if (stage === 'uninstall') {
+          if (uninstallSelected.size) {
+            finish({
+              style,
+              optional: [...selected].sort(),
+              uninstall: [...uninstallSelected].sort(),
+            });
+          }
+        } else if (installed.size) showUninstall();
+        return;
+      }
       toggleOptional(index, option);
     });
 
@@ -233,7 +266,7 @@ function installMenu(
         return true;
       }
       if (sequence !== '\x1b') return false;
-      if (stage === 'skills') showOptional();
+      if (stage === 'skills' || stage === 'uninstall') showOptional();
       else if (stage === 'groups') showStyle();
       else finish(null);
       return true;
@@ -256,11 +289,11 @@ function workstyleOptions(): SelectOption[] {
   ];
 }
 
-function optionalOptions(selected: Set<string>): SelectOption[] {
+function optionalOptions(selected: Set<string>, installed: Set<string>): SelectOption[] {
   return [
     ...optionalSkillGroups.map((group) => ({
-      name: `[${groupMark(group, selected)}] ${group.label}`,
-      description: group.description,
+      name: `[${groupMark(group, selected, installed)}] ${group.label}`,
+      description: statusDescription(group.description, group.skills.every(({ id }) => installed.has(id))),
       value: group.id,
     })),
     {
@@ -268,17 +301,46 @@ function optionalOptions(selected: Set<string>): SelectOption[] {
       description: 'Apply this selection',
       value: INSTALL,
     },
+    ...(installed.size
+      ? [{
+        name: 'Uninstall installed skills',
+        description: 'Remove selected local skills without touching edited files',
+        value: UNINSTALL,
+      }]
+      : []),
     cancelOption,
   ];
 }
 
-function skillOptions(group: OptionalSkillGroup, selected: Set<string>): SelectOption[] {
+function skillOptions(group: OptionalSkillGroup, selected: Set<string>, installed: Set<string>): SelectOption[] {
   return [
     ...group.skills.map(({ id, label, description }) => ({
-      name: `[${selected.has(id) ? 'x' : ' '}] ${label}`,
-      description,
+      name: `[${skillMark(id, selected, installed)}] ${label}`,
+      description: statusDescription(description, installed.has(id)),
       value: id,
     })),
+    {
+      name: 'Back',
+      description: 'Return to optional skill collections',
+      value: BACK,
+    },
+  ];
+}
+
+function uninstallOptions(installed: Set<string>, selected: Set<string>): SelectOption[] {
+  return [
+    ...optionalSkills
+      .filter(({ id }) => installed.has(id))
+      .map(({ id, label, description }) => ({
+        name: `[${selected.has(id) ? 'x' : ' '}] ${label}`,
+        description,
+        value: id,
+      })),
+    {
+      name: 'Uninstall',
+      description: 'Remove marked skills and preserve user edits',
+      value: UNINSTALL,
+    },
     {
       name: 'Back',
       description: 'Return to optional skill collections',
@@ -297,9 +359,18 @@ function selectionSummary(style: InstallSelection['style'], selected: Set<string
   return `Selected: ${label} | Optional: ${optional}`;
 }
 
-function groupMark(group: OptionalSkillGroup, selected: Set<string>) {
+function groupMark(group: OptionalSkillGroup, selected: Set<string>, installed: Set<string>) {
+  const installedCount = group.skills.filter(({ id }) => installed.has(id)).length;
   const count = group.skills.filter(({ id }) => selected.has(id)).length;
-  return count === group.skills.length ? 'x' : count ? '-' : ' ';
+  return installedCount === group.skills.length ? 'ok' : installedCount ? '~' : count ? 'x' : ' ';
+}
+
+function skillMark(id: string, selected: Set<string>, installed: Set<string>) {
+  return installed.has(id) ? 'ok' : selected.has(id) ? 'x' : ' ';
+}
+
+function statusDescription(description: string, installed: boolean) {
+  return installed ? `${description} (Installed locally)` : description;
 }
 
 function toggle(selected: Set<string>, id: string) {

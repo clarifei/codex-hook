@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
 import { installBytes } from './lib/files.ts';
 import { optionalSkillGroups, skillsFor } from './skill-manifest.ts';
-import { parseArgs } from './selection.ts';
+import { installedSelection, parseArgs } from './selection.ts';
 import { pruneManaged, readState, reserve, targetFor, writeState } from './sync-skills.ts';
 
 Deno.test('manifest and CLI selection', () => {
@@ -36,6 +36,17 @@ Deno.test('manifest and CLI selection', () => {
     'migrate-to-deno',
   ]);
   assert.deepEqual(parseArgs(['--with', 'tanstack-query']).optional, ['tanstack-query']);
+  assert.deepEqual(parseArgs(['--uninstall', 'tanstack-query']).uninstall, ['tanstack-query']);
+});
+
+Deno.test('detects destination skills installed locally', () => {
+  const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
+  try {
+    installBytes(targetFor(directory, 'tanstack-query/SKILL.md'), new TextEncoder().encode('skill'));
+    assert.deepEqual(installedSelection(directory), ['tanstack-query']);
+  } finally {
+    Deno.removeSync(directory, { recursive: true });
+  }
 });
 
 Deno.test('managed paths reject collisions and escapes', () => {

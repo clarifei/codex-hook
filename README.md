@@ -36,6 +36,8 @@ The TUI first asks for a workstyle, then shows the optional collections:
 Enter advances or activates an action. Space toggles a skill. Collections with
 multiple skills open a second, focused list. Escape or `Back` returns to the
 previous list, while `Cancel` and Ctrl-C leave the installation unchanged.
+Locally installed skills are marked `[ok]` and selected automatically. Choose
+`Uninstall installed skills` to remove only the checked local skills.
 
 For automation, arguments skip the TUI:
 
@@ -43,13 +45,15 @@ For automation, arguments skip the TUI:
 ./install.sh --yes
 ./install.sh beeline --with matt-pocock
 ./install.sh baseline --all
+./install.sh --uninstall tanstack-query
 ```
 
 `baseline` is an alias for `caveman`. Use collection IDs such as
 `--with matt-pocock,deno` to select a collection, or leaf IDs such as
 `--with tanstack-query,react-view-transitions` to select individual skills.
 `--all` installs every listed leaf skill; `--with=` with no value clears all
-optional skills.
+optional skills. `--uninstall` removes selected installed skills only; modified
+managed files are preserved.
 
 Installed files stay within Codex's discovery layout:
 

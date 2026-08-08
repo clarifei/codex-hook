@@ -9,7 +9,7 @@ import { copyTree, installFile } from './lib/files.ts';
 import { ensureRtk } from './lib/rtk.ts';
 import { type InstallSelection, optionalSkillGroups, type Workstyle, workstyles } from './skill-manifest.ts';
 import { chooseSelection } from './selection.ts';
-import { type ManagedResult, readState, syncSkills } from './sync-skills.ts';
+import { type ManagedResult, readState, syncSkills, uninstallSkills } from './sync-skills.ts';
 
 type Summary = Record<'replace' | 'skip' | 'remove' | 'preserve', number>;
 
@@ -40,6 +40,12 @@ async function main() {
   const selection = await chooseSelection(source, codexHome, Deno.args);
   if (!selection) {
     console.log('Installation cancelled.');
+    return;
+  }
+
+  if (selection.uninstall?.length) {
+    const results = await uninstallSkills(codexHome, selection.uninstall);
+    printUninstallSummary(codexHome, selection.uninstall, summarize(results));
     return;
   }
 
@@ -111,6 +117,15 @@ function summarize(results: readonly Pick<ManagedResult, 'action'>[]): Summary {
     if (Object.hasOwn(summary, result.action)) summary[result.action]++;
     return summary;
   }, { replace: 0, skip: 0, remove: 0, preserve: 0 } as Summary);
+}
+
+function printUninstallSummary(codexHome: string, ids: readonly string[], skills: Summary) {
+  console.log(`
+codex-hook uninstall complete
+  skills   ${ids.join(', ')}
+  removed  ${skills.remove}
+  kept     ${skills.preserve} user-modified preserved
+  home     ${codexHome}`);
 }
 
 function printSummary({

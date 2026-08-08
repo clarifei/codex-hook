@@ -3,6 +3,8 @@ type Workstyle = 'caveman' | 'beeline';
 type InstallSelection = {
   style: Workstyle;
   optional: string[];
+  installed?: string[];
+  uninstall?: string[];
 };
 
 type SkillSource = {

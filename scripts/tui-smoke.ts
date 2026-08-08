@@ -7,6 +7,7 @@ const defaults: InstallSelection = { style: 'caveman', optional: [] };
 
 await installsSelection();
 await opensCollectionSubmenu();
+await uninstallsInstalledSkill();
 await cancelsFromMenu();
 await cancelsWithCtrlC();
 process.stdout.write('ok\n');
@@ -63,6 +64,35 @@ async function cancelsFromMenu() {
     for (let index = 0; index < workstyles.length; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     assert.equal(await within(selection, 'Cancel option did not cancel'), null);
+  } finally {
+    view.renderer.destroy();
+  }
+}
+
+async function uninstallsInstalledSkill() {
+  const view = await createTestRenderer({ width: 72, height: 20 });
+  try {
+    const selection = installMenu(view.renderer, {
+      ...defaults,
+      optional: ['tanstack-query'],
+      installed: ['tanstack-query'],
+    });
+    view.mockInput.pressEnter();
+    await view.flush();
+    assert.match(view.captureCharFrame(), /\[~\] TanStack/);
+    for (let index = 0; index < optionalSkillGroups.length + 1; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    await view.flush();
+    assert.match(view.captureCharFrame(), /Uninstall installed skills/);
+    view.mockInput.pressKey(' ');
+    await view.flush();
+    view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    assert.deepEqual(await within(selection, 'Uninstall did not finish'), {
+      style: 'caveman',
+      optional: ['tanstack-query'],
+      uninstall: ['tanstack-query'],
+    });
   } finally {
     view.renderer.destroy();
   }
