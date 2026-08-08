@@ -26,9 +26,16 @@ The TUI first asks for a workstyle, then shows the optional collections:
 - Workstyle: Caveman (default) or Beeline
 - Matt Pocock engineering and productivity skills
 - Emil Kowalski design engineering and motion skills
+- Deno (Deno, Deploy, Frontend, Migrate to Deno, and Sandbox)
+- Hono and ElysiaJS
+- Matteo Collina (Fastify and Skill Optimizer)
+- Better Auth (authentication features and security)
+- Vercel React (Best Practices and View Transitions)
+- TanStack (individual ecosystem skills)
 
-Enter advances or activates an action. Space toggles an optional collection.
-Escape goes back, while `Cancel` and Ctrl-C leave the installation unchanged.
+Enter advances or activates an action. Space toggles a skill. Collections with
+multiple skills open a second, focused list. Escape or `Back` returns to the
+previous list, while `Cancel` and Ctrl-C leave the installation unchanged.
 
 For automation, arguments skip the TUI:
 
@@ -38,8 +45,11 @@ For automation, arguments skip the TUI:
 ./install.sh baseline --all
 ```
 
-`baseline` is an alias for `caveman`. Use `--with matt-pocock,emil-kowalski`,
-`--all`, or `--with=` to select, install all, or clear optional collections.
+`baseline` is an alias for `caveman`. Use collection IDs such as
+`--with matt-pocock,deno` to select a collection, or leaf IDs such as
+`--with tanstack-query,react-view-transitions` to select individual skills.
+`--all` installs every listed leaf skill; `--with=` with no value clears all
+optional skills.
 
 Installed files stay within Codex's discovery layout:
 

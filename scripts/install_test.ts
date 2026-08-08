@@ -15,13 +15,27 @@ Deno.test('manifest and CLI selection', () => {
   ]);
 
   const all = skillsFor('beeline', optionalSkillGroups.map(({ id }) => id));
-  assert.equal(all.length, 6);
+  assert.equal(all.length, 37);
   assert(all.find((skill) => skill.repository === 'emilkowalski/skills')?.exclude?.includes('prototype'));
+  assert(all.some((skill) => skill.repository === 'denoland/skills' && skill.source === 'skills/deno'));
+  assert(
+    all.some((skill) =>
+      skill.repository === 'tanstack-skills/tanstack-skills' && skill.destination === 'tanstack-query'
+    ),
+  );
   assert.deepEqual(parseArgs(['--style', 'baseline', '--with', 'matt-pocock']), {
     interactive: false,
     style: 'caveman',
     optional: ['matt-pocock'],
   });
+  assert.deepEqual(parseArgs(['--with', 'deno']).optional, [
+    'deno',
+    'deno-deploy',
+    'deno-frontend',
+    'deno-sandbox',
+    'migrate-to-deno',
+  ]);
+  assert.deepEqual(parseArgs(['--with', 'tanstack-query']).optional, ['tanstack-query']);
 });
 
 Deno.test('managed paths reject collisions and escapes', () => {

@@ -47,8 +47,9 @@ async function syncSkills(
     const key = `${skill.repository}@${skill.ref}`;
     for (const entry of trees.get(key) ?? []) {
       if (!entry.path.startsWith(`${skill.source}/`)) continue;
-      const relative = entry.path.slice(skill.source.length + 1);
-      if (excluded(skill, relative)) continue;
+      const inner = entry.path.slice(skill.source.length + 1);
+      if (excluded(skill, inner)) continue;
+      const relative = skill.destination ? `${skill.destination}/${inner}` : inner;
       reserve(targets, relative);
       files.push({ skill, path: entry.path, relative, sha: entry.sha });
     }

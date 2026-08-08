@@ -3,7 +3,9 @@ import { installedStyle } from '../hooks/lib/style.ts';
 import {
   type InstallSelection,
   isWorkstyle,
+  normalizeOptional,
   optionalSkillGroups,
+  optionalSkills,
   type Workstyle,
   workstyles,
 } from './skill-manifest.ts';
@@ -72,19 +74,25 @@ async function chooseWithTui(
 function savedSelection(codexHome: string): InstallSelection {
   const state = readState(path.join(codexHome, '.codex-hook', 'skills.json'));
   const style: Workstyle = isWorkstyle(state.style) ? state.style : installedStyle(codexHome) || 'caveman';
-  const known = new Set(optionalSkillGroups.map(({ id }) => id));
-  const optional = Array.isArray(state.optional) ? state.optional.filter((id) => known.has(id)) : [];
+  const known = new Set([
+    ...optionalSkillGroups.map(({ id }) => id),
+    ...optionalSkills.map(({ id }) => id),
+  ]);
+  const optional = Array.isArray(state.optional) ? normalizeOptional(state.optional.filter((id) => known.has(id))) : [];
   return { style, optional };
 }
 
 function parseArgs(args: readonly string[]): InstallArgs {
   const result: InstallArgs = { interactive: args.length === 0 };
-  const known = new Set(optionalSkillGroups.map(({ id }) => id));
+  const known = new Set([
+    ...optionalSkillGroups.map(({ id }) => id),
+    ...optionalSkills.map(({ id }) => id),
+  ]);
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
     if (argument === '--yes') continue;
     if (argument === '--all') {
-      result.optional = [...known];
+      result.optional = normalizeOptional(optionalSkillGroups.map(({ id }) => id));
       continue;
     }
     if (argument === '--style' || argument === '--with') {
@@ -106,7 +114,7 @@ function parseArgs(args: readonly string[]): InstallArgs {
       continue;
     }
     const styles = workstyles.map(({ id }) => id).join('|');
-    throw new Error(`usage: install [${styles}] [--with group,...] [--all] [--yes] (got ${argument})`);
+    throw new Error(`usage: install [${styles}] [--with group-or-skill,...] [--all] [--yes] (got ${argument})`);
   }
   return result;
 }
@@ -121,7 +129,7 @@ function parseOptional(value: string, known: Set<string>) {
   const selected = value ? [...new Set(value.split(',').filter(Boolean))] : [];
   const unknown = selected.filter((id) => !known.has(id));
   if (unknown.length) throw new Error(`unknown optional skill group: ${unknown.join(', ')}`);
-  return selected;
+  return normalizeOptional(selected);
 }
 
 export { chooseSelection, parseArgs };

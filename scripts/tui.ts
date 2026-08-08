@@ -9,11 +9,19 @@ import {
   SelectRenderableEvents,
   TextRenderable,
 } from '@opentui/core';
-import { coreComponents, type InstallSelection, optionalSkillGroups, workstyles } from './skill-manifest.ts';
+import {
+  coreComponents,
+  type InstallSelection,
+  normalizeOptional,
+  type OptionalSkillGroup,
+  optionalSkillGroups,
+  workstyles,
+} from './skill-manifest.ts';
 
 const runtimeArgs = process.argv.slice(2);
 const INSTALL = Symbol('install');
 const CANCEL = Symbol('cancel');
+const BACK = Symbol('back');
 const cancelOption: SelectOption = {
   name: 'Cancel',
   description: 'Leave the current installation unchanged',
@@ -35,14 +43,16 @@ function installMenu(
   renderer: CliRenderer,
   defaults: InstallSelection,
 ): Promise<InstallSelection | null> {
-  const selected = new Set(defaults.optional);
+  const selected = new Set(normalizeOptional(defaults.optional));
   let style = defaults.style;
-  let stage: 'style' | 'optional' = 'style';
+  let stage: 'style' | 'groups' | 'skills' = 'style';
+  let activeGroup: OptionalSkillGroup | null = null;
   let finished = false;
   const foreground = RGBA.defaultForeground();
   const background = RGBA.defaultBackground();
-  const maxOptions = Math.max(workstyles.length + 1, optionalSkillGroups.length + 2);
-  const menuHeight = Math.max(2, Math.min(maxOptions, renderer.height - 15));
+  const maxSkillOptions = Math.max(...optionalSkillGroups.map(({ skills }) => skills.length + 1));
+  const maxOptions = Math.max(workstyles.length + 1, optionalSkillGroups.length + 2, maxSkillOptions);
+  const menuHeight = Math.max(2, Math.min(maxOptions, renderer.height - 17));
 
   const title = new TextRenderable(renderer, {
     content: 'codex-hook setup',
@@ -80,21 +90,20 @@ function installMenu(
     bg: background,
     truncate: true,
   });
-  const panel = new BoxRenderable(renderer, {
-    width: '100%',
-    height: menuHeight + 5,
-    padding: 1,
-    flexDirection: 'column',
-    gap: 1,
-    border: true,
-    borderStyle: 'single',
-    borderColor: foreground,
-    backgroundColor: background,
-    title: 'Choose a workstyle',
-    titleColor: foreground,
+  const heading = new TextRenderable(renderer, {
+    content: 'Choose a workstyle',
+    height: 1,
+    fg: foreground,
+    bg: background,
+    truncate: true,
   });
-  panel.add(menu);
-  panel.add(detail);
+  const divider = new TextRenderable(renderer, {
+    content: '----------------------------------------',
+    height: 1,
+    fg: foreground,
+    bg: background,
+    truncate: true,
+  });
   const summary = new TextRenderable(renderer, {
     content: selectionSummary(style, selected),
     height: 1,
@@ -118,7 +127,7 @@ function installMenu(
     overflow: 'hidden',
     backgroundColor: background,
   });
-  for (const child of [title, subtitle, panel, summary, core]) layout.add(child);
+  for (const child of [title, subtitle, heading, divider, menu, detail, summary, core]) layout.add(child);
 
   return new Promise((resolve) => {
     const finish = (selection: InstallSelection | null) => {
@@ -130,28 +139,53 @@ function installMenu(
 
     const showStyle = () => {
       stage = 'style';
+      activeGroup = null;
       subtitle.content = 'Step 1 of 2';
-      panel.title = 'Choose a workstyle';
+      heading.content = 'Choose a workstyle';
       summary.content = selectionSummary(style, selected);
       menu.options = workstyleOptions();
       menu.setSelectedIndex(Math.max(0, workstyles.findIndex(({ id }) => id === style)));
     };
 
     const showOptional = () => {
-      stage = 'optional';
+      stage = 'groups';
+      activeGroup = null;
       subtitle.content = 'Step 2 of 2';
-      panel.title = 'Optional skill collections';
+      heading.content = 'Optional skill collections';
       summary.content = selectionSummary(style, selected);
       menu.options = optionalOptions(selected);
       menu.setSelectedIndex(0);
     };
 
+    const showSkills = (group: OptionalSkillGroup) => {
+      stage = 'skills';
+      activeGroup = group;
+      subtitle.content = 'Step 2 of 2';
+      heading.content = `${group.label} skills`;
+      menu.options = skillOptions(group, selected);
+      menu.setSelectedIndex(0);
+    };
+
     const toggleOptional = (index: number, option: SelectOption | null) => {
-      const group = optionalSkillGroups.find(({ id }) => id === option?.value);
-      if (!group) return;
-      toggle(selected, group.id);
+      if (stage === 'groups') {
+        const group = optionalSkillGroups.find(({ id }) => id === option?.value);
+        if (!group) return;
+        if (group.skills.length > 1) {
+          showSkills(group);
+          return;
+        }
+        toggle(selected, group.skills[0].id);
+        summary.content = selectionSummary(style, selected);
+        menu.options = optionalOptions(selected);
+        menu.setSelectedIndex(index);
+        return;
+      }
+      if (stage !== 'skills' || !activeGroup) return;
+      const skill = activeGroup.skills.find(({ id }) => id === option?.value);
+      if (!skill) return;
+      toggle(selected, skill.id);
       summary.content = selectionSummary(style, selected);
-      menu.options = optionalOptions(selected);
+      menu.options = skillOptions(activeGroup, selected);
       menu.setSelectedIndex(index);
     };
 
@@ -170,6 +204,10 @@ function installMenu(
         showOptional();
         return;
       }
+      if (option.value === BACK) {
+        showOptional();
+        return;
+      }
       if (option.value === INSTALL) {
         finish({ style, optional: [...selected].sort() });
         return;
@@ -183,11 +221,12 @@ function installMenu(
         return true;
       }
       if (sequence === ' ') {
-        if (stage === 'optional') toggleOptional(menu.getSelectedIndex(), menu.getSelectedOption());
+        if (stage !== 'style') toggleOptional(menu.getSelectedIndex(), menu.getSelectedOption());
         return true;
       }
       if (sequence !== '\x1b') return false;
-      if (stage === 'optional') showStyle();
+      if (stage === 'skills') showOptional();
+      else if (stage === 'groups') showStyle();
       else finish(null);
       return true;
     });
@@ -211,10 +250,10 @@ function workstyleOptions(): SelectOption[] {
 
 function optionalOptions(selected: Set<string>): SelectOption[] {
   return [
-    ...optionalSkillGroups.map(({ id, label, description }) => ({
-      name: `[${selected.has(id) ? 'x' : ' '}] ${label}`,
-      description,
-      value: id,
+    ...optionalSkillGroups.map((group) => ({
+      name: `[${groupMark(group, selected)}] ${group.label}`,
+      description: group.description,
+      value: group.id,
     })),
     {
       name: 'Install',
@@ -225,11 +264,34 @@ function optionalOptions(selected: Set<string>): SelectOption[] {
   ];
 }
 
+function skillOptions(group: OptionalSkillGroup, selected: Set<string>): SelectOption[] {
+  return [
+    ...group.skills.map(({ id, label, description }) => ({
+      name: `[${selected.has(id) ? 'x' : ' '}] ${label}`,
+      description,
+      value: id,
+    })),
+    {
+      name: 'Back',
+      description: 'Return to optional skill collections',
+      value: BACK,
+    },
+  ];
+}
+
 function selectionSummary(style: InstallSelection['style'], selected: Set<string>) {
   const label = workstyles.find(({ id }) => id === style)?.label ?? style;
-  const optional = optionalSkillGroups.filter(({ id }) => selected.has(id)).map(({ label }) => label).join(', ') ||
-    'none';
+  const optional = optionalSkillGroups.flatMap((group) => {
+    const count = group.skills.filter(({ id }) => selected.has(id)).length;
+    if (!count) return [];
+    return group.skills.length === 1 ? [group.label] : [`${group.label} ${count}/${group.skills.length}`];
+  }).join(', ') || 'none';
   return `Selected: ${label} | Optional: ${optional}`;
+}
+
+function groupMark(group: OptionalSkillGroup, selected: Set<string>) {
+  const count = group.skills.filter(({ id }) => selected.has(id)).length;
+  return count === group.skills.length ? 'x' : count ? '-' : ' ';
 }
 
 function toggle(selected: Set<string>, id: string) {

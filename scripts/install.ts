@@ -123,11 +123,12 @@ function printSummary({
   codebaseMemoryChanged,
   wigoloChanged,
 }: PrintedSummary) {
-  const optional = selection.optional.length
-    ? optionalSkillGroups.filter((group) => selection.optional.includes(group.id)).map((group) => group.label).join(
-      ', ',
-    )
-    : 'none';
+  const selected = new Set(selection.optional);
+  const optional = optionalSkillGroups.flatMap((group) => {
+    const count = group.skills.filter(({ id }) => selected.has(id)).length;
+    if (!count) return [];
+    return group.skills.length === 1 ? [group.label] : [`${group.label} ${count}/${group.skills.length}`];
+  }).join(', ') || 'none';
   console.log(`
 codex-hook install complete
   style    ${selection.style} full
