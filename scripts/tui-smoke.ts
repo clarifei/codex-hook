@@ -79,7 +79,24 @@ async function uninstallsInstalledSkill() {
     });
     view.mockInput.pressEnter();
     await view.flush();
-    assert.match(view.captureCharFrame(), /\[~\] TanStack/);
+    assert.match(view.captureCharFrame(), /\[-\] TanStack\s+partial/);
+    const tanstackIndex = optionalSkillGroups.findIndex(({ id }) => id === 'tanstack');
+    for (let index = 0; index < tanstackIndex; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    await view.flush();
+    const queryIndex = optionalSkillGroups.find(({ id }) => id === 'tanstack')!.skills.findIndex(({ id }) =>
+      id === 'tanstack-query'
+    );
+    for (let index = 0; index < queryIndex; index++) view.mockInput.pressArrow('down');
+    await view.flush();
+    assert.match(view.captureCharFrame(), /\[x\] TanStack Query\s+ok/);
+    view.mockInput.pressKey(' ');
+    await view.flush();
+    assert.match(view.captureCharFrame(), /\[ \] TanStack Query\s+ok/);
+    const tanstackSkills = optionalSkillGroups.find(({ id }) => id === 'tanstack')!.skills;
+    for (let index = queryIndex; index < tanstackSkills.length; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    await view.flush();
     for (let index = 0; index < optionalSkillGroups.length + 1; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     await view.flush();
@@ -90,7 +107,7 @@ async function uninstallsInstalledSkill() {
     view.mockInput.pressEnter();
     assert.deepEqual(await within(selection, 'Uninstall did not finish'), {
       style: 'caveman',
-      optional: ['tanstack-query'],
+      optional: [],
       uninstall: ['tanstack-query'],
     });
   } finally {

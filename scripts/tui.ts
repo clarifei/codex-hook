@@ -292,8 +292,8 @@ function workstyleOptions(): SelectOption[] {
 function optionalOptions(selected: Set<string>, installed: Set<string>): SelectOption[] {
   return [
     ...optionalSkillGroups.map((group) => ({
-      name: `[${groupMark(group, selected, installed)}] ${group.label}`,
-      description: statusDescription(group.description, group.skills.every(({ id }) => installed.has(id))),
+      name: `[${groupMark(group, selected)}] ${group.label}${groupStatus(group, installed)}`,
+      description: group.description,
       value: group.id,
     })),
     {
@@ -315,8 +315,8 @@ function optionalOptions(selected: Set<string>, installed: Set<string>): SelectO
 function skillOptions(group: OptionalSkillGroup, selected: Set<string>, installed: Set<string>): SelectOption[] {
   return [
     ...group.skills.map(({ id, label, description }) => ({
-      name: `[${skillMark(id, selected, installed)}] ${label}`,
-      description: statusDescription(description, installed.has(id)),
+      name: `[${selected.has(id) ? 'x' : ' '}] ${label}${installed.has(id) ? '  ok' : ''}`,
+      description,
       value: id,
     })),
     {
@@ -359,18 +359,14 @@ function selectionSummary(style: InstallSelection['style'], selected: Set<string
   return `Selected: ${label} | Optional: ${optional}`;
 }
 
-function groupMark(group: OptionalSkillGroup, selected: Set<string>, installed: Set<string>) {
-  const installedCount = group.skills.filter(({ id }) => installed.has(id)).length;
+function groupMark(group: OptionalSkillGroup, selected: Set<string>) {
   const count = group.skills.filter(({ id }) => selected.has(id)).length;
-  return installedCount === group.skills.length ? 'ok' : installedCount ? '~' : count ? 'x' : ' ';
+  return count === group.skills.length ? 'x' : count ? '-' : ' ';
 }
 
-function skillMark(id: string, selected: Set<string>, installed: Set<string>) {
-  return installed.has(id) ? 'ok' : selected.has(id) ? 'x' : ' ';
-}
-
-function statusDescription(description: string, installed: boolean) {
-  return installed ? `${description} (Installed locally)` : description;
+function groupStatus(group: OptionalSkillGroup, installed: Set<string>) {
+  const count = group.skills.filter(({ id }) => installed.has(id)).length;
+  return count === group.skills.length ? '  ok' : count ? '  partial' : '';
 }
 
 function toggle(selected: Set<string>, id: string) {
