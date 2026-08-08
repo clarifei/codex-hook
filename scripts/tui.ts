@@ -50,35 +50,41 @@ function installMenu(
   let finished = false;
   const foreground = RGBA.defaultForeground();
   const background = RGBA.defaultBackground();
-  const maxSkillOptions = Math.max(...optionalSkillGroups.map(({ skills }) => skills.length + 1));
-  const maxOptions = Math.max(workstyles.length + 1, optionalSkillGroups.length + 2, maxSkillOptions);
-  const menuHeight = Math.max(2, Math.min(maxOptions, renderer.height - 17));
+  const accent = RGBA.fromIndex(6);
+  const headingColor = RGBA.fromIndex(3);
+  const muted = RGBA.fromIndex(8);
+  const positive = RGBA.fromIndex(2);
+  const selectedText = RGBA.fromIndex(15);
+  const selectedBackground = RGBA.fromIndex(4);
+  const menuHeight = Math.max(2, renderer.height - 10);
 
   const title = new TextRenderable(renderer, {
     content: 'codex-hook setup',
     height: 1,
-    fg: foreground,
+    fg: accent,
     bg: background,
     truncate: true,
   });
   const subtitle = new TextRenderable(renderer, {
     content: 'Step 1 of 2',
     height: 1,
-    fg: foreground,
+    fg: muted,
     bg: background,
     truncate: true,
   });
   const menu = new SelectRenderable(renderer, {
     width: '100%',
-    height: menuHeight,
+    height: Math.min(workstyleOptions().length, menuHeight),
     options: workstyleOptions(),
     selectedIndex: Math.max(0, workstyles.findIndex(({ id }) => id === style)),
     backgroundColor: 'transparent',
     focusedBackgroundColor: 'transparent',
     textColor: foreground,
     focusedTextColor: foreground,
-    selectedBackgroundColor: foreground,
-    selectedTextColor: background,
+    selectedBackgroundColor: selectedBackground,
+    selectedTextColor: selectedText,
+    descriptionColor: muted,
+    selectedDescriptionColor: selectedText,
     showScrollIndicator: true,
     showDescription: false,
     wrapSelection: true,
@@ -86,35 +92,35 @@ function installMenu(
   const detail = new TextRenderable(renderer, {
     content: '',
     height: 1,
-    fg: foreground,
+    fg: muted,
     bg: background,
     truncate: true,
   });
   const heading = new TextRenderable(renderer, {
     content: 'Choose a workstyle',
     height: 1,
-    fg: foreground,
+    fg: headingColor,
     bg: background,
     truncate: true,
   });
   const divider = new TextRenderable(renderer, {
-    content: '----------------------------------------',
+    content: '---',
     height: 1,
-    fg: foreground,
+    fg: muted,
     bg: background,
     truncate: true,
   });
   const summary = new TextRenderable(renderer, {
     content: selectionSummary(style, selected),
     height: 1,
-    fg: foreground,
+    fg: positive,
     bg: background,
     truncate: true,
   });
   const core = new TextRenderable(renderer, {
     content: `Included: ${coreComponents.map(({ label }) => label).join(' | ')}`,
     height: 1,
-    fg: foreground,
+    fg: muted,
     bg: background,
     truncate: true,
   });
@@ -123,13 +129,20 @@ function installMenu(
     height: '100%',
     padding: 1,
     flexDirection: 'column',
-    gap: 1,
+    gap: 0,
     overflow: 'hidden',
     backgroundColor: background,
   });
   for (const child of [title, subtitle, heading, divider, menu, detail, summary, core]) layout.add(child);
 
   return new Promise((resolve) => {
+    const setMenu = (options: SelectOption[], selectedIndex: number) => {
+      menu.height = Math.min(options.length, menuHeight);
+      menu.options = options;
+      menu.setSelectedIndex(selectedIndex);
+      detail.content = menu.getSelectedOption()?.description ?? '';
+    };
+
     const finish = (selection: InstallSelection | null) => {
       if (finished) return;
       finished = true;
@@ -143,8 +156,7 @@ function installMenu(
       subtitle.content = 'Step 1 of 2';
       heading.content = 'Choose a workstyle';
       summary.content = selectionSummary(style, selected);
-      menu.options = workstyleOptions();
-      menu.setSelectedIndex(Math.max(0, workstyles.findIndex(({ id }) => id === style)));
+      setMenu(workstyleOptions(), Math.max(0, workstyles.findIndex(({ id }) => id === style)));
     };
 
     const showOptional = () => {
@@ -153,8 +165,7 @@ function installMenu(
       subtitle.content = 'Step 2 of 2';
       heading.content = 'Optional skill collections';
       summary.content = selectionSummary(style, selected);
-      menu.options = optionalOptions(selected);
-      menu.setSelectedIndex(0);
+      setMenu(optionalOptions(selected), 0);
     };
 
     const showSkills = (group: OptionalSkillGroup) => {
@@ -162,8 +173,7 @@ function installMenu(
       activeGroup = group;
       subtitle.content = 'Step 2 of 2';
       heading.content = `${group.label} skills`;
-      menu.options = skillOptions(group, selected);
-      menu.setSelectedIndex(0);
+      setMenu(skillOptions(group, selected), 0);
     };
 
     const toggleOptional = (index: number, option: SelectOption | null) => {
@@ -176,8 +186,7 @@ function installMenu(
         }
         toggle(selected, group.skills[0].id);
         summary.content = selectionSummary(style, selected);
-        menu.options = optionalOptions(selected);
-        menu.setSelectedIndex(index);
+        setMenu(optionalOptions(selected), index);
         return;
       }
       if (stage !== 'skills' || !activeGroup) return;
@@ -185,8 +194,7 @@ function installMenu(
       if (!skill) return;
       toggle(selected, skill.id);
       summary.content = selectionSummary(style, selected);
-      menu.options = skillOptions(activeGroup, selected);
-      menu.setSelectedIndex(index);
+      setMenu(skillOptions(activeGroup, selected), index);
     };
 
     menu.on(SelectRenderableEvents.SELECTION_CHANGED, (_index: number, option: SelectOption | null) => {

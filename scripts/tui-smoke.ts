@@ -21,6 +21,11 @@ async function installsSelection() {
     assert.match(frame, /Choose a workstyle/);
     assert.match(frame, /Terse, direct responses/);
     assert.match(frame, /Cancel/);
+    const lines = frame.split('\n');
+    assert.equal(
+      lines.findIndex((line) => line.includes('Step 1 of 2')),
+      lines.findIndex((line) => line.includes('codex-hook setup')) + 1,
+    );
 
     const beelineIndex = workstyles.findIndex(({ id }) => id === 'beeline');
     for (let index = 0; index < beelineIndex; index++) view.mockInput.pressArrow('down');
