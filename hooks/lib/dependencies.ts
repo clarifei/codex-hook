@@ -10,6 +10,7 @@ const codexHome = path.resolve(
 );
 
 function missingDependencies(): string[] {
+  const config = readConfig();
   return [
     !rtkInstalled() && 'rtk',
     !fs.existsSync(path.join(codexHome, 'skills', 'ponytail', 'SKILL.md')) &&
@@ -18,18 +19,21 @@ function missingDependencies(): string[] {
     !fs.existsSync(
       path.join(codexHome, 'skills', 'codebase-memory', 'SKILL.md'),
     ) && 'codebase-memory skill',
-    !codebaseMemoryMcpConfigured() && 'codebase-memory MCP configuration',
+    !codebaseMemoryMcpConfigured(config) && 'codebase-memory MCP configuration',
     !fs.existsSync(path.join(codexHome, 'skills', 'wigolo', 'SKILL.md')) &&
     'wigolo skill',
-    !wigoloMcpConfigured() && 'wigolo MCP configuration',
+    !wigoloMcpConfigured(config) && 'wigolo MCP configuration',
     !fs.existsSync(path.join(codexHome, 'RTK.md')) && 'RTK.md',
   ].filter((value): value is string => Boolean(value));
 }
 
-function mcpSection(name: string) {
+function readConfig() {
   const configPath = path.join(codexHome, 'config.toml');
-  if (!fs.existsSync(configPath)) return null;
-  const text = fs.readFileSync(configPath, 'utf8');
+  return fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+}
+
+function mcpSection(name: string, text = readConfig()) {
+  if (!text) return null;
   const header = `[mcp_servers.${name}]`;
   const start = text.indexOf(header);
   if (start < 0) return null;
@@ -41,20 +45,16 @@ function mcpSection(name: string) {
   );
 }
 
-function codebaseMemoryMcpConfigured() {
-  const section = mcpSection('codebase-memory-mcp');
+function codebaseMemoryMcpConfigured(text?: string) {
+  const section = mcpSection('codebase-memory-mcp', text);
   return Boolean(section && /^command\s*=\s*.+$/m.test(section));
 }
 
-function wigoloMcpConfigured() {
-  const section = mcpSection('wigolo');
+function wigoloMcpConfigured(text?: string) {
+  const section = mcpSection('wigolo', text);
   if (!section) return false;
   return /^command\s*=\s*"npx"\s*$/m.test(section) &&
     /^args\s*=\s*\["-y",\s*"wigolo"\]\s*$/m.test(section);
-}
-
-function requiresRtk(command: unknown) {
-  return typeof command === 'string' && !/^\s*rtk(?:\s|$)/i.test(command);
 }
 
 function rtkInstalled() {
@@ -71,4 +71,4 @@ function rtkInstalled() {
   }
 }
 
-export { codebaseMemoryMcpConfigured, codexHome, missingDependencies, requiresRtk, wigoloMcpConfigured };
+export { codebaseMemoryMcpConfigured, codexHome, missingDependencies, wigoloMcpConfigured };

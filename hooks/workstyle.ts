@@ -1,8 +1,9 @@
 #!/usr/bin/env -S deno run --allow-env --allow-read --allow-run
 
-import { missingDependencies, requiresRtk } from './lib/dependencies.ts';
+import { missingDependencies } from './lib/dependencies.ts';
 import { buildPolicy, policyFor } from './lib/policy.ts';
 import { type HookEvent, output, readEvent } from './lib/protocol.ts';
+import { requiresRtk } from './lib/rtk.ts';
 
 if (Deno.args[0] === '--self-test') {
   if (
@@ -32,18 +33,6 @@ await readEvent(run);
 
 function run(event: HookEvent) {
   if (!event) return;
-
-  if (event.hook_event_name === 'PreToolUse') {
-    const command = event.tool_input && event.tool_input.command;
-    if (!requiresRtk(command)) return;
-    return output({
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: 'Run every shell command through rtk.',
-      },
-    });
-  }
 
   if (
     event.hook_event_name === 'SessionStart' ||

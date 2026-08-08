@@ -5,6 +5,7 @@ type InstallSelection = {
   optional: string[];
   installed?: string[];
   uninstall?: string[];
+  refresh?: boolean;
 };
 
 type SkillSource = {

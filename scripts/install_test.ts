@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
-import { installBytes } from './lib/files.ts';
+import { gitBlobHash, installBytes } from './lib/files.ts';
 import { optionalSkillGroups, skillsFor } from './skill-manifest.ts';
 import { installedSelection, parseArgs } from './selection.ts';
-import { pruneManaged, readState, reserve, targetFor, writeState } from './sync-skills.ts';
+import { pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState } from './sync-skills.ts';
 
 Deno.test('manifest and CLI selection', () => {
   const baseline = skillsFor().map((skill) => `${skill.repository}:${skill.source}`).sort();
@@ -37,6 +37,7 @@ Deno.test('manifest and CLI selection', () => {
   ]);
   assert.deepEqual(parseArgs(['--with', 'tanstack-query']).optional, ['tanstack-query']);
   assert.deepEqual(parseArgs(['--uninstall', 'tanstack-query']).uninstall, ['tanstack-query']);
+  assert.equal(parseArgs(['--refresh', '--yes']).refresh, true);
 });
 
 Deno.test('detects destination skills installed locally', () => {
@@ -44,6 +45,35 @@ Deno.test('detects destination skills installed locally', () => {
   try {
     installBytes(targetFor(directory, 'tanstack-query/SKILL.md'), new TextEncoder().encode('skill'));
     assert.deepEqual(installedSelection(directory), ['tanstack-query']);
+  } finally {
+    Deno.removeSync(directory, { recursive: true });
+  }
+});
+
+Deno.test('uses the local cache and uninstalls owned files offline', async () => {
+  const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
+  try {
+    const relative = 'tanstack-query/SKILL.md';
+    const target = targetFor(directory, relative);
+    const bytes = new TextEncoder().encode('cached skill');
+    installBytes(target, bytes);
+    writeState(path.join(directory, '.codex-hook', 'skills.json'), {
+      version: 2,
+      style: 'caveman',
+      optional: ['tanstack-query'],
+      files: { [relative]: gitBlobHash(bytes) },
+      skillFiles: { 'tanstack-query': [relative] },
+    });
+
+    assert.deepEqual(await syncSkills(directory, { style: 'caveman', optional: ['tanstack-query'] }), [
+      { action: 'skip', target },
+    ]);
+    assert.deepEqual(
+      (await uninstallSkills(directory, ['tanstack-query'])).map(({ action }) => action),
+      ['remove'],
+    );
+    assert.throws(() => Deno.statSync(target));
+    assert.deepEqual(readState(path.join(directory, '.codex-hook', 'skills.json')).optional, []);
   } finally {
     Deno.removeSync(directory, { recursive: true });
   }

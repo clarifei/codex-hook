@@ -49,12 +49,15 @@ the state file is generated on the first install at `~/.codex/.codex-hook/skills
 ./install.sh beeline --with matt-pocock
 ./install.sh baseline --all
 ./install.sh --uninstall tanstack-query
+./install.sh --refresh --yes
 ```
 
 `baseline` is an alias for `caveman`. `--with` accepts a collection or leaf
 skill, for example `--with matt-pocock,deno` or
 `--with tanstack-query,react-view-transitions`. `--all` selects every leaf
 skill. `--with=` clears optional skills.
+reruns use the local managed cache when files are unchanged; use `--refresh` to
+check upstream skill changes.
 
 uninstall accepts the same collection or leaf ids. it updates
 `~/.codex/.codex-hook/skills.json`, keeps unrelated skills, and preserves files

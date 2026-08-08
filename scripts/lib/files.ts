@@ -31,6 +31,10 @@ function installBytes(target: string, bytes: Uint8Array): InstallAction {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   if (current && current.equals(bytes)) return 'skip';
+  return writeBytes(target, bytes);
+}
+
+function writeBytes(target: string, bytes: Uint8Array): InstallAction {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, bytes);
   return 'replace';
@@ -49,5 +53,5 @@ function copyTree(source: string, target: string, report: InstallReport) {
   }
 }
 
-export { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob };
+export { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob, writeBytes };
 export type { InstallAction, InstallReport };

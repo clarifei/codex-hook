@@ -10,13 +10,14 @@ import {
   type Workstyle,
   workstyles,
 } from './skill-manifest.ts';
-import { readState } from './sync-skills.ts';
+import { type ManagedState, readState } from './sync-skills.ts';
 
 type InstallArgs = {
   interactive: boolean;
   style?: Workstyle;
   optional?: string[];
   uninstall?: string[];
+  refresh?: boolean;
 };
 
 async function chooseSelection(
@@ -25,13 +26,15 @@ async function chooseSelection(
   args: readonly string[],
 ): Promise<InstallSelection | null> {
   const parsed = parseArgs(args);
-  const saved = savedSelection(codexHome);
-  const installed = installedSelection(codexHome);
+  const state = readState(path.join(codexHome, '.codex-hook', 'skills.json'));
+  const saved = savedSelection(codexHome, state);
+  const installed = installedSelection(codexHome, state);
   const initial: InstallSelection = {
     style: parsed.style || saved.style,
     optional: parsed.optional === undefined ? normalizeOptional([...saved.optional, ...installed]) : parsed.optional,
     installed,
     ...(parsed.uninstall ? { uninstall: parsed.uninstall } : {}),
+    ...(parsed.refresh ? { refresh: true } : {}),
   };
   return parsed.interactive && Deno.stdin.isTerminal() && Deno.stdout.isTerminal()
     ? await chooseWithTui(source, initial)
@@ -76,8 +79,7 @@ async function chooseWithTui(
   }
 }
 
-function savedSelection(codexHome: string): InstallSelection {
-  const state = readState(path.join(codexHome, '.codex-hook', 'skills.json'));
+function savedSelection(codexHome: string, state: ManagedState): InstallSelection {
   const style: Workstyle = isWorkstyle(state.style) ? state.style : installedStyle(codexHome) || 'caveman';
   const optional = Array.isArray(state.optional)
     ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id)))
@@ -85,8 +87,10 @@ function savedSelection(codexHome: string): InstallSelection {
   return { style, optional };
 }
 
-function installedSelection(codexHome: string): string[] {
-  const state = readState(path.join(codexHome, '.codex-hook', 'skills.json'));
+function installedSelection(
+  codexHome: string,
+  state = readState(path.join(codexHome, '.codex-hook', 'skills.json')),
+): string[] {
   const root = path.join(codexHome, 'skills');
   const saved = new Set(
     Array.isArray(state.optional) ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id))) : [],
@@ -117,6 +121,10 @@ function parseArgs(args: readonly string[]): InstallArgs {
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
     if (argument === '--yes') continue;
+    if (argument === '--refresh') {
+      result.refresh = true;
+      continue;
+    }
     if (argument === '--all') {
       result.optional = normalizeOptional(optionalSkillGroups.map(({ id }) => id));
       continue;
@@ -150,7 +158,7 @@ function parseArgs(args: readonly string[]): InstallArgs {
     }
     const styles = workstyles.map(({ id }) => id).join('|');
     throw new Error(
-      `usage: install [${styles}] [--with group-or-skill,...] [--uninstall group-or-skill,...] [--all] [--yes] (got ${argument})`,
+      `usage: install [${styles}] [--with group-or-skill,...] [--uninstall group-or-skill,...] [--all] [--refresh] [--yes] (got ${argument})`,
     );
   }
   return result;

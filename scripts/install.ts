@@ -53,7 +53,7 @@ async function main() {
     readState(path.join(codexHome, '.codex-hook', 'skills.json')).files,
   ).length === 0;
   const rtkAction = ensureRtk();
-  const skillResults = await syncSkills(codexHome, selection);
+  const skillResults = await syncSkills(codexHome, selection, { refresh: selection.refresh });
   const removedSkillResults = legacyInstall
     ? workstyles
       .filter(({ id }) => id !== selection.style)
