@@ -78,7 +78,7 @@ the manifest and defaults to match your environment.
 |-- hooks/                   codex hooks
 |-- config.toml              mcp configuration
 |-- hooks.json
-`-- rtk.md
+`-- RTK.md
 ```
 
 ## local checks
