@@ -1,13 +1,10 @@
 # codex-hook
 
-One global hook with a baseline-first installer. New installs use Caveman,
-Ponytail, RTK, Codebase Memory MCP, and Wigolo. Beeline is available as the
-alternate workstyle.
+A small global hook installer for Codex. New installs include Caveman,
+Ponytail, RTK, Codebase Memory MCP, and Wigolo. Beeline is the alternate
+workstyle.
 
-The installer and hooks run on Deno. Interactive selection uses OpenTUI's
-supported Bun renderer; pass `--yes` when Bun is unavailable. Network access is
-required. The configured MCP commands use `npx`, so keep Node 20-25 available
-for Wigolo's current `better-sqlite3` dependency.
+## Quick start
 
 Linux:
 
@@ -21,25 +18,31 @@ Windows:
 irm https://raw.githubusercontent.com/clarifei/codex-hook/main/install.ps1 | iex
 ```
 
-The TUI first asks for a workstyle, then shows the optional collections:
+The installer asks for a workstyle, then optional skills.
 
-- Workstyle: Caveman (default) or Beeline
-- Matt Pocock engineering and productivity skills
-- Emil Kowalski design engineering and motion skills
-- Deno (Deno, Deploy, Frontend, Migrate to Deno, and Sandbox)
+## Requirements
+
+- Deno runs the installer and hooks.
+- Bun is only needed for the interactive TUI. Use `--yes` for a Deno-only install.
+- Node 20-25 is needed by the configured MCP commands.
+- Network access is required during installation.
+
+## Optional skills
+
+- Matt Pocock: engineering and productivity
+- Emil Kowalski: design engineering and motion
+- Deno: runtime, Deploy, Frontend, migration, and Sandbox
 - Hono and ElysiaJS
-- Matteo Collina (Fastify and Skill Optimizer)
-- Better Auth (authentication features and security)
-- Vercel React (Best Practices and View Transitions)
-- TanStack (individual ecosystem skills)
+- Matteo Collina: Fastify and Skill Optimizer
+- Better Auth: auth features and security
+- Vercel React: Best Practices and View Transitions
+- TanStack: choose individual skills in its submenu
 
-Enter advances or activates an action. Space toggles a skill. Collections with
-multiple skills open a second, focused list. Escape or `Back` returns to the
-previous list, while `Cancel` and Ctrl-C leave the installation unchanged.
-Locally installed skills are marked `[ok]` and selected automatically. Choose
-`Uninstall installed skills` to remove only the checked local skills.
+Installed skills are detected from the local Codex directory. They show as
+`[ok]` and are selected automatically. In the TUI, choose `Uninstall installed
+skills` to remove only the skills you mark.
 
-For automation, arguments skip the TUI:
+## Commands
 
 ```sh
 ./install.sh --yes
@@ -48,38 +51,28 @@ For automation, arguments skip the TUI:
 ./install.sh --uninstall tanstack-query
 ```
 
-`baseline` is an alias for `caveman`. Use collection IDs such as
-`--with matt-pocock,deno` to select a collection, or leaf IDs such as
-`--with tanstack-query,react-view-transitions` to select individual skills.
-`--all` installs every listed leaf skill; `--with=` with no value clears all
-optional skills. `--uninstall` removes selected installed skills only; modified
-managed files are preserved.
+`baseline` is an alias for `caveman`. `--with` accepts a collection or leaf
+skill, for example `--with matt-pocock,deno` or
+`--with tanstack-query,react-view-transitions`. `--all` selects every leaf
+skill. `--with=` clears optional skills.
 
-Installed files stay within Codex's discovery layout:
+Uninstall accepts the same collection or leaf IDs. It updates
+`~/.codex/.codex-hook/skills.json`, keeps unrelated skills, and preserves files
+you edited.
+
+## Files
 
 ```text
 ~/.codex/
-|-- .codex-hook/
-|   `-- skills.json          managed-file ownership and selected collections
-|-- hooks/
-|   |-- lib/
-|   `-- workstyle.ts
-|-- skills/                  one discoverable directory per skill
-|-- config.toml              Codebase Memory and Wigolo MCP entries
+|-- .codex-hook/skills.json  managed skill state
+|-- skills/                  discoverable skills
+|-- hooks/                   Codex hooks
+|-- config.toml              MCP configuration
 |-- hooks.json
 `-- RTK.md
 ```
 
-The managed state lets reruns remove deselected or upstream-deleted files
-without touching unrelated skills. A managed file changed by the user is
-preserved. Upstream files with unchanged Git blob hashes are not downloaded
-again, and duplicate skill targets fail before writes.
-
-The installer preserves an existing native Codebase Memory MCP command.
-Otherwise it configures `npx -y codebase-memory-mcp`; Wigolo uses
-`npx -y wigolo`. Verify Wigolo with `npx wigolo doctor`.
-
-Run local checks with:
+## Local checks
 
 ```sh
 deno task check
