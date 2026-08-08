@@ -45,7 +45,7 @@ function installMenu(
   renderer: CliRenderer,
   defaults: InstallSelection,
 ): Promise<InstallSelection | null> {
-  const selected = new Set(normalizeOptional(defaults.optional));
+  const selected = new Set(normalizeOptional(defaults.optional, false));
   let style = defaults.style;
   let stage: 'style' | 'groups' | 'skills' | 'uninstall' = 'style';
   let activeGroup: OptionalSkillGroup | null = null;

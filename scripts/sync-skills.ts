@@ -45,13 +45,13 @@ async function syncSkills(
     style: selection.style || 'caveman',
     optional: selection.optional || [],
   };
-  const selected = normalizeOptional(optional);
+  const selected = normalizeOptional(optional, false);
   const statePath = path.join(codexHome, '.codex-hook', 'skills.json');
   const state = readState(statePath);
   const cached = options.refresh ? null : cachedResults(codexHome, state, style, selected);
   if (cached) return cached;
 
-  const skills = skillsFor(style, selected);
+  const skills = skillsFor(style, selected, false);
   const treeRequests = new Map<string, Promise<TreeEntry[]>>();
   for (const skill of skills) {
     const key = `${skill.repository}@${skill.ref}`;
@@ -117,7 +117,7 @@ function uninstallSkills(
   const statePath = path.join(codexHome, '.codex-hook', 'skills.json');
   const state = readState(statePath);
   const requested = new Set(normalizeOptional(ids));
-  const selected = normalizeOptional(state.optional || []);
+  const selected = normalizeOptional(state.optional || [], false);
   const optional = selected
     .filter((id) => !requested.has(id));
   const removed = selected.filter((id) => requested.has(id));

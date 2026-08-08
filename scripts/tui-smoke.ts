@@ -6,6 +6,7 @@ import { installMenu } from './tui.ts';
 const defaults: InstallSelection = { style: 'caveman', optional: [] };
 
 await installsSelection();
+await selectsSingleDenoSkill();
 await opensCollectionSubmenu();
 await uninstallsInstalledSkill();
 await cancelsFromMenu();
@@ -64,6 +65,49 @@ async function cancelsFromMenu() {
     for (let index = 0; index < workstyles.length; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     assert.equal(await within(selection, 'Cancel option did not cancel'), null);
+  } finally {
+    view.renderer.destroy();
+  }
+}
+
+async function selectsSingleDenoSkill() {
+  const partialView = await createTestRenderer({ width: 72, height: 20 });
+  try {
+    const partialSelection = installMenu(partialView.renderer, {
+      ...defaults,
+      optional: ['deno'],
+      installed: ['deno'],
+    });
+    partialView.mockInput.pressEnter();
+    await partialView.flush();
+    assert.match(partialView.captureCharFrame(), /\[-\] Deno\s+partial/);
+    partialView.mockInput.pressCtrlC();
+    assert.equal(await within(partialSelection, 'Partial Deno selection did not cancel'), null);
+  } finally {
+    partialView.renderer.destroy();
+  }
+
+  const view = await createTestRenderer({ width: 72, height: 20 });
+  try {
+    const selection = installMenu(view.renderer, defaults);
+    view.mockInput.pressEnter();
+    await view.flush();
+    const denoIndex = optionalSkillGroups.findIndex(({ id }) => id === 'deno');
+    for (let index = 0; index < denoIndex; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    await view.flush();
+    view.mockInput.pressKey(' ');
+    await view.flush();
+    const denoSkills = optionalSkillGroups.find(({ id }) => id === 'deno')!.skills;
+    for (let index = 0; index < denoSkills.length; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    await view.flush();
+    for (let index = 0; index < optionalSkillGroups.length; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    assert.deepEqual(await within(selection, 'Single Deno skill did not install'), {
+      style: 'caveman',
+      optional: ['deno'],
+    });
   } finally {
     view.renderer.destroy();
   }

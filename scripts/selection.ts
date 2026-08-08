@@ -31,7 +31,9 @@ async function chooseSelection(
   const installed = installedSelection(codexHome, state);
   const initial: InstallSelection = {
     style: parsed.style || saved.style,
-    optional: parsed.optional === undefined ? normalizeOptional([...saved.optional, ...installed]) : parsed.optional,
+    optional: parsed.optional === undefined
+      ? normalizeOptional([...saved.optional, ...installed], false)
+      : parsed.optional,
     installed,
     ...(parsed.uninstall ? { uninstall: parsed.uninstall } : {}),
     ...(parsed.refresh ? { refresh: true } : {}),
@@ -82,7 +84,7 @@ async function chooseWithTui(
 function savedSelection(codexHome: string, state: ManagedState): InstallSelection {
   const style: Workstyle = isWorkstyle(state.style) ? state.style : installedStyle(codexHome) || 'caveman';
   const optional = Array.isArray(state.optional)
-    ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id)))
+    ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id)), false)
     : [];
   return { style, optional };
 }
@@ -93,7 +95,7 @@ function installedSelection(
 ): string[] {
   const root = path.join(codexHome, 'skills');
   const saved = new Set(
-    Array.isArray(state.optional) ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id))) : [],
+    Array.isArray(state.optional) ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id)), false) : [],
   );
   const installed = new Set<string>();
   for (const skill of optionalSkills) {

@@ -300,16 +300,19 @@ const optionalSkillGroups: readonly OptionalSkillGroup[] = [
 
 const optionalSkills = optionalSkillGroups.flatMap(({ skills }) => skills);
 
-function normalizeOptional(optional: readonly string[]): string[] {
+// TUI/state selections are leaf IDs; this disambiguates IDs shared by a group and leaf.
+function normalizeOptional(optional: readonly string[], expandGroups = true): string[] {
   const selected = new Set<string>();
   const unknown = new Set<string>();
   for (const id of optional) {
     const group = optionalSkillGroups.find((candidate) => candidate.id === id);
-    if (group) {
+    const skill = optionalSkills.find((candidate) => candidate.id === id);
+    if (group && expandGroups) {
       group.skills.forEach(({ id: skillId }) => selected.add(skillId));
       continue;
     }
-    if (optionalSkills.some((skill) => skill.id === id)) selected.add(id);
+    if (skill) selected.add(id);
+    else if (group) group.skills.forEach(({ id: skillId }) => selected.add(skillId));
     else unknown.add(id);
   }
   if (unknown.size) throw new Error(`unknown optional skill group: ${[...unknown].join(', ')}`);
@@ -323,8 +326,9 @@ function isWorkstyle(value: unknown): value is Workstyle {
 function skillsFor(
   style: Workstyle = 'caveman',
   optional: readonly string[] = [],
+  expandGroups = true,
 ): SkillSource[] {
-  const selected = new Set(normalizeOptional(optional));
+  const selected = new Set(normalizeOptional(optional, expandGroups));
   return [
     styleSkills[style],
     ...coreSkills,

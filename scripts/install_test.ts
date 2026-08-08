@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
 import { gitBlobHash, installBytes } from './lib/files.ts';
-import { optionalSkillGroups, skillsFor } from './skill-manifest.ts';
+import { optionalSkillGroups, optionalSkills, skillsFor } from './skill-manifest.ts';
 import { installedSelection, parseArgs } from './selection.ts';
 import { pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState } from './sync-skills.ts';
 
@@ -23,6 +23,14 @@ Deno.test('manifest and CLI selection', () => {
       skill.repository === 'tanstack-skills/tanstack-skills' && skill.destination === 'tanstack-query'
     ),
   );
+  const optionalSources = optionalSkills.flatMap(({ sources }) => sources);
+  for (const group of optionalSkillGroups) {
+    for (const skill of group.skills) {
+      const selected = skillsFor('beeline', [skill.id], false)
+        .filter((source) => optionalSources.includes(source));
+      assert.deepEqual(selected, [...skill.sources], `${group.id}/${skill.id} selected siblings`);
+    }
+  }
   assert.deepEqual(parseArgs(['--style', 'baseline', '--with', 'matt-pocock']), {
     interactive: false,
     style: 'caveman',
