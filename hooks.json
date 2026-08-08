@@ -1,5 +1,5 @@
 {
-  "description": "concise Ponytail, selected style, Codebase Memory, Wigolo, and RTK policy.",
+  "description": "baseline Ponytail, selected style, Codebase Memory, Wigolo, and RTK policy.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,8 +7,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.mjs\"",
-            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.mjs')",
+            "command": "deno run --quiet --allow-env --allow-read --allow-run \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.ts\"",
+            "commandWindows": "deno run --quiet --allow-env --allow-read --allow-run (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.ts')",
             "timeout": 5,
             "additionalContextLimit": 900,
             "statusMessage": "loading workstyle policy"
@@ -21,8 +21,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.mjs\"",
-            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.mjs')",
+            "command": "deno run --quiet --allow-env --allow-read --allow-run \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.ts\"",
+            "commandWindows": "deno run --quiet --allow-env --allow-read --allow-run (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.ts')",
             "timeout": 5,
             "additionalContextLimit": 900,
             "statusMessage": "loading workstyle policy"
@@ -36,8 +36,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.mjs\"",
-            "commandWindows": "node (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.mjs')",
+            "command": "deno run --quiet --allow-env --allow-read --allow-run \"${CODEX_HOME:-$HOME/.codex}/hooks/workstyle.ts\"",
+            "commandWindows": "deno run --quiet --allow-env --allow-read --allow-run (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\workstyle.ts')",
             "timeout": 5
           }
         ]

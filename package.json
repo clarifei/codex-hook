@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "@opentui/core": "0.5.1"
+  }
+}

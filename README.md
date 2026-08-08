@@ -1,35 +1,71 @@
-# codex hook
+# codex-hook
 
-one global hook. ponytail full, beeline full by default (caveman optional), rtk enforced.
+One global hook with a baseline-first installer. New installs use Caveman,
+Ponytail, RTK, Codebase Memory MCP, and Wigolo. Beeline is available as the
+alternate workstyle.
 
-needs `node` and network. installer gets rtk from `rtk-ai/rtk`, then syncs supported skills from every upstream repository direct from the source files.
+The installer and hooks run on Deno. Interactive selection uses OpenTUI's
+supported Bun renderer; pass `--yes` when Bun is unavailable. Network access is
+required. The configured MCP commands use `npx`, so keep Node 20-25 available
+for Wigolo's current `better-sqlite3` dependency.
 
-linux:
+Linux:
 
 ```sh
 curl --fail --silent --show-error --location https://raw.githubusercontent.com/clarifei/codex-hook/main/install.sh | sh
 ```
 
-windows:
+Windows:
 
 ```powershell
 irm https://raw.githubusercontent.com/clarifei/codex-hook/main/install.ps1 | iex
 ```
 
-the installer accepts `beeline` (default) or `caveman`; it removes the other skill family before finishing. In an interactive terminal, press Enter after reading the summary; then trust the hook in `/hooks` and start a new session.
+The TUI always installs the core baseline and lets you choose:
+
+- Workstyle: Caveman (default) or Beeline
+- Matt Pocock engineering and productivity skills
+- Emil Kowalski design engineering and motion skills
+
+For automation, arguments skip the TUI:
 
 ```sh
-./install.sh beeline
-./install.sh caveman
+./install.sh --yes
+./install.sh beeline --with matt-pocock
+./install.sh baseline --all
 ```
 
-```powershell
-./install.ps1 beeline
-./install.ps1 caveman
+`baseline` is an alias for `caveman`. Use `--with matt-pocock,emil-kowalski`,
+`--all`, or `--with=` to select, install all, or clear optional collections.
+
+Installed files stay within Codex's discovery layout:
+
+```text
+~/.codex/
+|-- .codex-hook/
+|   `-- skills.json          managed-file ownership and selected collections
+|-- hooks/
+|   |-- lib/
+|   `-- workstyle.ts
+|-- skills/                  one discoverable directory per skill
+|-- config.toml              Codebase Memory and Wigolo MCP entries
+|-- hooks.json
+`-- RTK.md
 ```
 
-skills: every current selected-style, Ponytail, Wigolo, and stable Matt Pocock engineering/productivity skill, plus Emil Kowalski skills except `prototype`. Emil's `prototype` is skipped because Matt's skill owns the same name. The installer also configures Wigolo MCP as `npx -y wigolo`, alongside the local `codebase-memory` skill (https://github.com/DeusData/codebase-memory-mcp).
+The managed state lets reruns remove deselected or upstream-deleted files
+without touching unrelated skills. A managed file changed by the user is
+preserved. Upstream files with unchanged Git blob hashes are not downloaded
+again, and duplicate skill targets fail before writes.
 
-Wigolo requires Node 20-25 for its current `better-sqlite3` dependency. Verify the setup with `npx wigolo doctor`; Node 26 is not supported by that native dependency yet.
+The installer preserves an existing native Codebase Memory MCP command.
+Otherwise it configures `npx -y codebase-memory-mcp`; Wigolo uses
+`npx -y wigolo`. Verify Wigolo with `npx wigolo doctor`.
 
-unchanged upstream files are skipped by their source blob hash. different files replace the local copy. startup policy is limited to Ponytail, the selected Beeline/Caveman style, RTK, Codebase Memory MCP, and Wigolo; the Matt Pocock and Emil Kowalski collections are installed without being added to the hook. ponytail bundled hook stays disabled; this hook owns startup.
+Run local checks with:
+
+```sh
+deno task check
+deno task test
+bun run scripts/tui.ts --smoke-test
+```

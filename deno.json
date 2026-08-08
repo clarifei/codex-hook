@@ -1,0 +1,17 @@
+{
+  "imports": {
+    "@opentui/core": "npm:@opentui/core@0.5.1",
+    "@opentui/core/testing": "npm:@opentui/core@0.5.1/testing"
+  },
+  "nodeModulesDir": "none",
+  "fmt": {
+    "lineWidth": 120,
+    "singleQuote": true
+  },
+  "tasks": {
+    "check": "deno fmt --check deno.json package.json hooks.json scripts hooks && deno lint scripts hooks && deno check scripts/*.ts scripts/lib/*.ts hooks/*.ts hooks/lib/*.ts",
+    "install": "deno run -A scripts/install.ts",
+    "test": "deno run -A scripts/install.ts --self-test",
+    "tui:smoke": "bun run scripts/tui.ts --smoke-test"
+  }
+}

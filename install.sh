@@ -5,7 +5,7 @@ archive_url=https://github.com/clarifei/codex-hook/archive/refs/heads/main.tar.g
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT
 
-command -v node >/dev/null 2>&1 || { echo "node is required" >&2; exit 1; }
+command -v deno >/dev/null 2>&1 || { echo "deno is required" >&2; exit 1; }
 
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL "$archive_url" | tar -xzf - -C "$temp_dir" --strip-components=1
@@ -16,4 +16,8 @@ else
   exit 1
 fi
 
-node "$temp_dir/scripts/install.mjs" "$@"
+if [ "$#" -eq 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
+  deno run --allow-all --config "$temp_dir/deno.json" "$temp_dir/scripts/install.ts" </dev/tty
+else
+  deno run --allow-all --config "$temp_dir/deno.json" "$temp_dir/scripts/install.ts" "$@"
+fi

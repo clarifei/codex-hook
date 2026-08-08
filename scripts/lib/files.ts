@@ -2,30 +2,33 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-function gitBlobHash(bytes) {
+type InstallAction = 'replace' | 'skip';
+type InstallReport = (action: InstallAction, target: string) => void;
+
+function gitBlobHash(bytes: Uint8Array) {
   const result = crypto.createHash('sha1');
   result.update(`blob ${bytes.length}\0`);
   result.update(bytes);
   return result.digest('hex');
 }
 
-function sameGitBlob(target, expected) {
+function sameGitBlob(target: string, expected: string) {
   let bytes;
   try {
     bytes = fs.readFileSync(target);
   } catch (error) {
-    if (error.code === 'ENOENT') return false;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error;
   }
   return gitBlobHash(bytes) === expected;
 }
 
-function installBytes(target, bytes) {
+function installBytes(target: string, bytes: Uint8Array): InstallAction {
   let current;
   try {
     current = fs.readFileSync(target);
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   if (current && current.equals(bytes)) return 'skip';
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -33,11 +36,11 @@ function installBytes(target, bytes) {
   return 'replace';
 }
 
-function installFile(source, target) {
+function installFile(source: string, target: string): InstallAction {
   return installBytes(target, fs.readFileSync(source));
 }
 
-function copyTree(source, target, report) {
+function copyTree(source: string, target: string, report: InstallReport) {
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
     const from = path.join(source, entry.name);
     const to = path.join(target, entry.name);
@@ -47,3 +50,4 @@ function copyTree(source, target, report) {
 }
 
 export { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob };
+export type { InstallAction, InstallReport };
