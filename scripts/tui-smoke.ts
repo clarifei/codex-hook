@@ -15,19 +15,29 @@ async function installsSelection() {
   try {
     const selection = installMenu(view.renderer, defaults);
     await view.flush();
-    assert.match(view.captureCharFrame(), /Step 1 of 2 {2}Choose a workstyle/);
-    assert.match(view.captureCharFrame(), /Cancel/);
+    let frame = view.captureCharFrame();
+    assert.match(frame, /Step 1 of 2/);
+    assert.match(frame, /Choose a workstyle/);
+    assert.match(frame, /Terse, direct responses/);
+    assert.match(frame, /Cancel/);
 
     const beelineIndex = workstyles.findIndex(({ id }) => id === 'beeline');
     for (let index = 0; index < beelineIndex; index++) view.mockInput.pressArrow('down');
+    await view.flush();
+    frame = view.captureCharFrame();
+    assert.match(frame, /Structured, action-first responses/);
     view.mockInput.pressEnter();
     await view.flush();
-    assert.match(view.captureCharFrame(), /Step 2 of 2 {2}Choose optional skill collections/);
+    frame = view.captureCharFrame();
+    assert.match(frame, /Step 2 of 2/);
+    assert.match(frame, /Optional skill collections/);
+    assert.match(frame, /Engineering and productivity workflows/);
 
     view.mockInput.pressKey(' ');
     await view.flush();
-    assert.match(view.captureCharFrame(), /\[x\] Matt Pocock/);
-    assert.match(view.captureCharFrame(), /Optional: Matt Pocock/);
+    frame = view.captureCharFrame();
+    assert.match(frame, /\[x\] Matt Pocock/);
+    assert.match(frame, /Optional: Matt Pocock/);
 
     for (let index = 0; index < optionalSkillGroups.length; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();

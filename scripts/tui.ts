@@ -41,7 +41,8 @@ function installMenu(
   let finished = false;
   const foreground = RGBA.defaultForeground();
   const background = RGBA.defaultBackground();
-  const menuRows = Math.max(workstyles.length + 1, optionalSkillGroups.length + 2) * 2;
+  const maxOptions = Math.max(workstyles.length + 1, optionalSkillGroups.length + 2);
+  const menuHeight = Math.max(2, Math.min(maxOptions, renderer.height - 15));
 
   const title = new TextRenderable(renderer, {
     content: 'codex-hook setup',
@@ -51,7 +52,7 @@ function installMenu(
     truncate: true,
   });
   const subtitle = new TextRenderable(renderer, {
-    content: 'Step 1 of 2  Choose a workstyle',
+    content: 'Step 1 of 2',
     height: 1,
     fg: foreground,
     bg: background,
@@ -59,7 +60,7 @@ function installMenu(
   });
   const menu = new SelectRenderable(renderer, {
     width: '100%',
-    height: Math.max(2, Math.min(menuRows, renderer.height - 10)),
+    height: menuHeight,
     options: workstyleOptions(),
     selectedIndex: Math.max(0, workstyles.findIndex(({ id }) => id === style)),
     backgroundColor: 'transparent',
@@ -68,11 +69,32 @@ function installMenu(
     focusedTextColor: foreground,
     selectedBackgroundColor: foreground,
     selectedTextColor: background,
-    descriptionColor: foreground,
-    selectedDescriptionColor: background,
     showScrollIndicator: true,
+    showDescription: false,
     wrapSelection: true,
   });
+  const detail = new TextRenderable(renderer, {
+    content: '',
+    height: 1,
+    fg: foreground,
+    bg: background,
+    truncate: true,
+  });
+  const panel = new BoxRenderable(renderer, {
+    width: '100%',
+    height: menuHeight + 5,
+    padding: 1,
+    flexDirection: 'column',
+    gap: 1,
+    border: true,
+    borderStyle: 'single',
+    borderColor: foreground,
+    backgroundColor: background,
+    title: 'Choose a workstyle',
+    titleColor: foreground,
+  });
+  panel.add(menu);
+  panel.add(detail);
   const summary = new TextRenderable(renderer, {
     content: selectionSummary(style, selected),
     height: 1,
@@ -93,8 +115,10 @@ function installMenu(
     padding: 1,
     flexDirection: 'column',
     gap: 1,
+    overflow: 'hidden',
+    backgroundColor: background,
   });
-  for (const child of [title, subtitle, menu, summary, core]) layout.add(child);
+  for (const child of [title, subtitle, panel, summary, core]) layout.add(child);
 
   return new Promise((resolve) => {
     const finish = (selection: InstallSelection | null) => {
@@ -106,7 +130,8 @@ function installMenu(
 
     const showStyle = () => {
       stage = 'style';
-      subtitle.content = 'Step 1 of 2  Choose a workstyle';
+      subtitle.content = 'Step 1 of 2';
+      panel.title = 'Choose a workstyle';
       summary.content = selectionSummary(style, selected);
       menu.options = workstyleOptions();
       menu.setSelectedIndex(Math.max(0, workstyles.findIndex(({ id }) => id === style)));
@@ -114,7 +139,8 @@ function installMenu(
 
     const showOptional = () => {
       stage = 'optional';
-      subtitle.content = 'Step 2 of 2  Choose optional skill collections';
+      subtitle.content = 'Step 2 of 2';
+      panel.title = 'Optional skill collections';
       summary.content = selectionSummary(style, selected);
       menu.options = optionalOptions(selected);
       menu.setSelectedIndex(0);
@@ -129,6 +155,9 @@ function installMenu(
       menu.setSelectedIndex(index);
     };
 
+    menu.on(SelectRenderableEvents.SELECTION_CHANGED, (_index: number, option: SelectOption | null) => {
+      detail.content = option?.description ?? '';
+    });
     menu.on(SelectRenderableEvents.ITEM_SELECTED, (index: number, option: SelectOption) => {
       if (option.value === CANCEL) {
         finish(null);
@@ -163,6 +192,7 @@ function installMenu(
       return true;
     });
 
+    detail.content = menu.getSelectedOption()?.description ?? '';
     renderer.root.add(layout);
     menu.focus();
   });
