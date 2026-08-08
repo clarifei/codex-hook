@@ -27,6 +27,9 @@ The TUI first asks for a workstyle, then shows the optional collections:
 - Matt Pocock engineering and productivity skills
 - Emil Kowalski design engineering and motion skills
 
+Enter advances or activates an action. Space toggles an optional collection.
+Escape goes back, while `Cancel` and Ctrl-C leave the installation unchanged.
+
 For automation, arguments skip the TUI:
 
 ```sh
@@ -67,5 +70,5 @@ Run local checks with:
 ```sh
 deno task check
 deno task test
-bun run scripts/tui.ts --smoke-test
+deno task tui:smoke
 ```

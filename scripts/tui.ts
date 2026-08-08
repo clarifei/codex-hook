@@ -13,6 +13,12 @@ import { coreComponents, type InstallSelection, optionalSkillGroups, workstyles 
 
 const runtimeArgs = process.argv.slice(2);
 const INSTALL = Symbol('install');
+const CANCEL = Symbol('cancel');
+const cancelOption: SelectOption = {
+  name: 'Cancel',
+  description: 'Leave the current installation unchanged',
+  value: CANCEL,
+};
 
 async function chooseInstall(
   defaults: InstallSelection = { style: 'caveman', optional: [] },
@@ -35,17 +41,17 @@ function installMenu(
   let finished = false;
   const foreground = RGBA.defaultForeground();
   const background = RGBA.defaultBackground();
-  const menuRows = Math.max(workstyles.length, optionalSkillGroups.length + 1) * 2;
+  const menuRows = Math.max(workstyles.length + 1, optionalSkillGroups.length + 2) * 2;
 
   const title = new TextRenderable(renderer, {
-    content: 'codex-hook',
+    content: 'codex-hook setup',
     height: 1,
     fg: foreground,
     bg: background,
     truncate: true,
   });
   const subtitle = new TextRenderable(renderer, {
-    content: '1 / 2  Workstyle',
+    content: 'Step 1 of 2  Choose a workstyle',
     height: 1,
     fg: foreground,
     bg: background,
@@ -53,7 +59,7 @@ function installMenu(
   });
   const menu = new SelectRenderable(renderer, {
     width: '100%',
-    height: Math.max(2, Math.min(menuRows, renderer.height - 8)),
+    height: Math.max(2, Math.min(menuRows, renderer.height - 10)),
     options: workstyleOptions(),
     selectedIndex: Math.max(0, workstyles.findIndex(({ id }) => id === style)),
     backgroundColor: 'transparent',
@@ -66,10 +72,16 @@ function installMenu(
     selectedDescriptionColor: background,
     showScrollIndicator: true,
     wrapSelection: true,
-    keyBindings: [{ name: 'space', action: 'select-current' }],
+  });
+  const summary = new TextRenderable(renderer, {
+    content: selectionSummary(style, selected),
+    height: 1,
+    fg: foreground,
+    bg: background,
+    truncate: true,
   });
   const core = new TextRenderable(renderer, {
-    content: `Always: ${coreComponents.map(({ label }) => label).join(' | ')}`,
+    content: `Included: ${coreComponents.map(({ label }) => label).join(' | ')}`,
     height: 1,
     fg: foreground,
     bg: background,
@@ -82,7 +94,7 @@ function installMenu(
     flexDirection: 'column',
     gap: 1,
   });
-  for (const child of [title, subtitle, menu, core]) layout.add(child);
+  for (const child of [title, subtitle, menu, summary, core]) layout.add(child);
 
   return new Promise((resolve) => {
     const finish = (selection: InstallSelection | null) => {
@@ -94,19 +106,34 @@ function installMenu(
 
     const showStyle = () => {
       stage = 'style';
-      subtitle.content = '1 / 2  Workstyle';
+      subtitle.content = 'Step 1 of 2  Choose a workstyle';
+      summary.content = selectionSummary(style, selected);
       menu.options = workstyleOptions();
       menu.setSelectedIndex(Math.max(0, workstyles.findIndex(({ id }) => id === style)));
     };
 
     const showOptional = () => {
       stage = 'optional';
-      subtitle.content = '2 / 2  Optional skills';
+      subtitle.content = 'Step 2 of 2  Choose optional skill collections';
+      summary.content = selectionSummary(style, selected);
       menu.options = optionalOptions(selected);
       menu.setSelectedIndex(0);
     };
 
+    const toggleOptional = (index: number, option: SelectOption | null) => {
+      const group = optionalSkillGroups.find(({ id }) => id === option?.value);
+      if (!group) return;
+      toggle(selected, group.id);
+      summary.content = selectionSummary(style, selected);
+      menu.options = optionalOptions(selected);
+      menu.setSelectedIndex(index);
+    };
+
     menu.on(SelectRenderableEvents.ITEM_SELECTED, (index: number, option: SelectOption) => {
+      if (option.value === CANCEL) {
+        finish(null);
+        return;
+      }
       if (stage === 'style') {
         const workstyle = workstyles.find(({ id }) => id === option.value);
         if (!workstyle) return;
@@ -118,16 +145,16 @@ function installMenu(
         finish({ style, optional: [...selected].sort() });
         return;
       }
-      const group = optionalSkillGroups.find(({ id }) => id === option.value);
-      if (!group) return;
-      toggle(selected, group.id);
-      menu.options = optionalOptions(selected);
-      menu.setSelectedIndex(index);
+      toggleOptional(index, option);
     });
 
     renderer.prependInputHandler((sequence) => {
       if (sequence === '\x03') {
         finish(null);
+        return true;
+      }
+      if (sequence === ' ') {
+        if (stage === 'optional') toggleOptional(menu.getSelectedIndex(), menu.getSelectedOption());
         return true;
       }
       if (sequence !== '\x1b') return false;
@@ -142,11 +169,14 @@ function installMenu(
 }
 
 function workstyleOptions(): SelectOption[] {
-  return workstyles.map(({ id, label, description }) => ({
-    name: label,
-    description,
-    value: id,
-  }));
+  return [
+    ...workstyles.map(({ id, label, description }) => ({
+      name: label,
+      description,
+      value: id,
+    })),
+    cancelOption,
+  ];
 }
 
 function optionalOptions(selected: Set<string>): SelectOption[] {
@@ -161,7 +191,15 @@ function optionalOptions(selected: Set<string>): SelectOption[] {
       description: 'Apply this selection',
       value: INSTALL,
     },
+    cancelOption,
   ];
+}
+
+function selectionSummary(style: InstallSelection['style'], selected: Set<string>) {
+  const label = workstyles.find(({ id }) => id === style)?.label ?? style;
+  const optional = optionalSkillGroups.filter(({ id }) => selected.has(id)).map(({ label }) => label).join(', ') ||
+    'none';
+  return `Selected: ${label} | Optional: ${optional}`;
 }
 
 function toggle(selected: Set<string>, id: string) {
@@ -170,14 +208,10 @@ function toggle(selected: Set<string>, id: string) {
 }
 
 if (import.meta.main) {
-  if (runtimeArgs.includes('--smoke-test')) {
-    await smokeTest();
-  } else {
-    const selection = await chooseInstall(readDefaults());
-    const output = argument('--output');
-    if (output) await writeFile(output, JSON.stringify(selection), 'utf8');
-    else console.log(JSON.stringify(selection));
-  }
+  const selection = await chooseInstall(readDefaults());
+  const output = argument('--output');
+  if (output) await writeFile(output, JSON.stringify(selection), 'utf8');
+  else console.log(JSON.stringify(selection));
 }
 
 function argument(name: string) {
@@ -190,35 +224,4 @@ function readDefaults(): InstallSelection {
   return value ? JSON.parse(value) : { style: 'caveman', optional: [] };
 }
 
-async function smokeTest() {
-  const { createTestRenderer } = await import('@opentui/core/testing');
-  const view = await createTestRenderer({ width: 60, height: 16 });
-  try {
-    const selection = installMenu(view.renderer, { style: 'caveman', optional: [] });
-    await view.flush();
-    if (!view.captureCharFrame().includes('1 / 2  Workstyle')) throw new Error('workstyle step did not render');
-
-    view.mockInput.pressArrow('down');
-    view.mockInput.pressEnter();
-    await view.flush();
-    if (!view.captureCharFrame().includes('2 / 2  Optional skills')) throw new Error('optional step did not open');
-
-    view.mockInput.pressKey(' ');
-    await view.flush();
-    if (!view.captureCharFrame().includes('[x] Matt Pocock')) throw new Error('space did not toggle a skill');
-
-    view.mockInput.pressArrow('down');
-    view.mockInput.pressArrow('down');
-    view.mockInput.pressEnter();
-    const result = await Promise.race([
-      selection,
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('enter did not install')), 250)),
-    ]);
-    if (result?.style !== 'beeline' || result.optional[0] !== 'matt-pocock') {
-      throw new Error('keyboard selection returned the wrong result');
-    }
-  } finally {
-    view.renderer.destroy();
-  }
-  process.stdout.write('ok\n');
-}
+export { installMenu };
