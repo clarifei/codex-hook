@@ -4,26 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { installedStyle } from '../hooks/lib/style.ts';
 import { disablePonytail, ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
-import { copyTree, installBytes, installFile } from './lib/files.ts';
+import { copyTree, installFile } from './lib/files.ts';
 import { ensureRtk } from './lib/rtk.ts';
-import { type InstallSelection, optionalSkillGroups, skillsFor, type Workstyle } from './skill-manifest.ts';
-import {
-  type ManagedResult,
-  pruneManaged,
-  readState,
-  reserve,
-  syncSkills,
-  targetFor,
-  writeState,
-} from './sync-skills.ts';
-
-type InstallArgs = {
-  interactive: boolean;
-  style?: Workstyle;
-  optional?: string[];
-};
+import { type InstallSelection, optionalSkillGroups, type Workstyle, workstyles } from './skill-manifest.ts';
+import { chooseSelection } from './selection.ts';
+import { type ManagedResult, readState, syncSkills } from './sync-skills.ts';
 
 type Summary = Record<'replace' | 'skip' | 'remove' | 'preserve', number>;
 
@@ -40,30 +26,18 @@ type PrintedSummary = {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-if (Deno.args[0] === '--self-test') {
-  selfTest();
-  console.log('ok');
-  Deno.exit(0);
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    Deno.exitCode = 1;
+  });
 }
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  Deno.exitCode = 1;
-});
 
 async function main() {
   const source = path.resolve(__dirname, '..');
   const codexHome = Deno.env.get('CODEX_HOME') ||
     path.join(os.homedir(), '.codex');
-  const args = parseArgs(Deno.args);
-  const saved = savedSelection(codexHome);
-  const initial: InstallSelection = {
-    style: args.style || saved.style,
-    optional: args.optional === undefined ? saved.optional : args.optional,
-  };
-  const selection = args.interactive && Deno.stdin.isTerminal() && Deno.stdout.isTerminal()
-    ? await chooseWithTui(source, initial)
-    : initial;
+  const selection = await chooseSelection(source, codexHome, Deno.args);
   if (!selection) {
     console.log('Installation cancelled.');
     return;
@@ -75,10 +49,9 @@ async function main() {
   const rtkAction = ensureRtk();
   const skillResults = await syncSkills(codexHome, selection);
   const removedSkillResults = legacyInstall
-    ? removeSkillFamily(
-      codexHome,
-      selection.style === 'beeline' ? 'caveman' : 'beeline',
-    )
+    ? workstyles
+      .filter(({ id }) => id !== selection.style)
+      .flatMap(({ id }) => removeSkillFamily(codexHome, id))
     : [];
   const localSkillResults: ManagedResult[] = [];
   copyTree(
@@ -113,112 +86,6 @@ async function main() {
     codebaseMemoryChanged,
     wigoloChanged,
   });
-}
-
-async function chooseWithTui(
-  source: string,
-  defaults: InstallSelection,
-): Promise<InstallSelection | null> {
-  const output = await Deno.makeTempFile({
-    prefix: 'codex-hook-selection-',
-    suffix: '.json',
-  });
-  try {
-    let status: { success: boolean; code: number };
-    try {
-      status = await new Deno.Command('bun', {
-        args: [
-          'run',
-          path.join(source, 'scripts', 'tui.ts'),
-          '--output',
-          output,
-          '--defaults',
-          JSON.stringify(defaults),
-        ],
-        cwd: source,
-        stdin: 'inherit',
-        stdout: 'inherit',
-        stderr: 'inherit',
-      }).spawn().status;
-    } catch (error) {
-      if (error instanceof Deno.errors.NotFound) {
-        throw new Error(
-          'Bun is required for the interactive OpenTUI; use --yes for a Deno-only install',
-        );
-      }
-      throw error;
-    }
-    if (!status.success) {
-      throw new Error(`OpenTUI exited with code ${status.code}`);
-    }
-    return JSON.parse(await Deno.readTextFile(output)) as
-      | InstallSelection
-      | null;
-  } finally {
-    await Deno.remove(output).catch(() => {});
-  }
-}
-
-function savedSelection(codexHome: string): InstallSelection {
-  const state = readState(path.join(codexHome, '.codex-hook', 'skills.json'));
-  const style: Workstyle = state.style === 'caveman' || state.style === 'beeline'
-    ? state.style
-    : installedStyle(codexHome) || 'caveman';
-  const known = new Set(optionalSkillGroups.map((group) => group.id));
-  const optional = Array.isArray(state.optional) ? state.optional.filter((id) => known.has(id)) : [];
-  return { style, optional };
-}
-
-function parseArgs(args: string[]): InstallArgs {
-  const result: InstallArgs = { interactive: args.length === 0 };
-  const known = new Set(optionalSkillGroups.map((group) => group.id));
-  for (let index = 0; index < args.length; index++) {
-    const argument = args[index];
-    if (argument === '--yes') continue;
-    if (argument === '--all') {
-      result.optional = [...known];
-      continue;
-    }
-    if (argument === '--style' || argument === '--with') {
-      if (!args[index + 1]) throw new Error(`${argument} needs a value`);
-      if (argument === '--style') result.style = normalizeStyle(args[++index]);
-      else result.optional = parseOptional(args[++index], known);
-      continue;
-    }
-    if (argument.startsWith('--style=')) {
-      result.style = normalizeStyle(argument.slice(8));
-      continue;
-    }
-    if (argument.startsWith('--with=')) {
-      result.optional = parseOptional(argument.slice(7), known);
-      continue;
-    }
-    if (!argument.startsWith('-') && result.style === undefined) {
-      result.style = normalizeStyle(argument);
-      continue;
-    }
-    throw new Error(
-      `usage: install [caveman|beeline] [--with group,...] [--all] [--yes] (got ${argument})`,
-    );
-  }
-  return result;
-}
-
-function normalizeStyle(style: string): Workstyle {
-  if (style === 'baseline') return 'caveman';
-  if (!['caveman', 'beeline'].includes(style)) {
-    throw new Error(`unsupported style: ${style}`);
-  }
-  return style as Workstyle;
-}
-
-function parseOptional(value: string, known: Set<string>) {
-  const selected = value ? [...new Set(value.split(',').filter(Boolean))] : [];
-  const unknown = selected.filter((id) => !known.has(id));
-  if (unknown.length) {
-    throw new Error(`unknown optional skill group: ${unknown.join(', ')}`);
-  }
-  return selected;
 }
 
 function removeSkillFamily(
@@ -276,80 +143,4 @@ codex-hook install complete
 Next steps
   1. Trust the hook in ${path.join(codexHome, 'hooks')}.
   2. Start a new Codex session.`);
-}
-
-function selfTest() {
-  const baseline = skillsFor().map((skill) => `${skill.repository}:${skill.source}`).sort().join(',');
-  if (
-    baseline !==
-      'DietrichGebert/ponytail:skills,JuliusBrussee/caveman:skills,KnockOutEZ/wigolo:skills'
-  ) {
-    throw new Error('baseline skill manifest failed');
-  }
-  const all = skillsFor(
-    'beeline',
-    optionalSkillGroups.map((group) => group.id),
-  );
-  const emil = all.find((skill) => skill.repository === 'emilkowalski/skills');
-  if (all.length !== 6 || !emil?.exclude?.includes('prototype')) {
-    throw new Error('optional skill manifest failed');
-  }
-  const parsed = parseArgs(['--style', 'baseline', '--with', 'matt-pocock']);
-  if (
-    parsed.style !== 'caveman' || parsed.optional?.[0] !== 'matt-pocock' ||
-    parsed.interactive
-  ) {
-    throw new Error('Argument parsing failed');
-  }
-  expectError(
-    () => reserve(new Set(['duplicate']), 'duplicate'),
-    'duplicate skill target:',
-  );
-  expectError(
-    () => targetFor('/tmp/codex-hook-test', '../escape'),
-    'invalid skill target:',
-  );
-
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hook-'));
-  try {
-    const managedRelative = 'optional/SKILL.md';
-    const managedTarget = targetFor(directory, managedRelative);
-    installBytes(managedTarget, new TextEncoder().encode('user edit'));
-    const preserved = pruneManaged(directory, {
-      [managedRelative]: 'upstream hash',
-    }, {});
-    if (preserved[0]?.action !== 'preserve') {
-      throw new Error('Modified skill preservation failed');
-    }
-    const statePath = path.join(directory, '.codex-hook', 'skills.json');
-    writeState(statePath, {
-      version: 1,
-      style: 'caveman',
-      optional: [],
-      files: {},
-    });
-    if (readState(statePath).style !== 'caveman') {
-      throw new Error('Managed state failed');
-    }
-
-    const configPath = path.join(directory, 'config.toml');
-    if (
-      !ensureCodebaseMemory(configPath) || ensureCodebaseMemory(configPath) ||
-      !ensureWigolo(configPath) || ensureWigolo(configPath)
-    ) {
-      throw new Error('Core MCP config failed');
-    }
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-}
-
-function expectError(run: () => void, prefix: string) {
-  try {
-    run();
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith(prefix)) return;
-    throw error;
-  }
-  throw new Error(`expected error: ${prefix}`);
 }

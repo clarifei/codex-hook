@@ -12,6 +12,18 @@ type SkillSource = {
   exclude?: readonly string[];
 };
 
+type WorkstyleOption = {
+  id: Workstyle;
+  label: string;
+  description: string;
+  source: SkillSource;
+};
+
+type CoreComponent = {
+  label: string;
+  source?: SkillSource;
+};
+
 type OptionalSkillGroup = {
   id: string;
   label: string;
@@ -19,19 +31,47 @@ type OptionalSkillGroup = {
   sources: readonly SkillSource[];
 };
 
-const styleSkills: Record<Workstyle, SkillSource> = {
-  caveman: {
-    repository: 'JuliusBrussee/caveman',
-    ref: 'main',
-    source: 'skills',
+const workstyles: readonly WorkstyleOption[] = [
+  {
+    id: 'caveman',
+    label: 'Caveman',
+    description: 'Terse, direct responses',
+    source: {
+      repository: 'JuliusBrussee/caveman',
+      ref: 'main',
+      source: 'skills',
+    },
   },
-  beeline: { repository: 'iceHub82/beeline', ref: 'main', source: 'skills' },
-};
-
-const coreSkills: readonly SkillSource[] = [
-  { repository: 'DietrichGebert/ponytail', ref: 'main', source: 'skills' },
-  { repository: 'KnockOutEZ/wigolo', ref: 'main', source: 'skills' },
+  {
+    id: 'beeline',
+    label: 'Beeline',
+    description: 'Structured, action-first responses',
+    source: {
+      repository: 'iceHub82/beeline',
+      ref: 'main',
+      source: 'skills',
+    },
+  },
 ];
+
+const styleSkills = Object.fromEntries(
+  workstyles.map(({ id, source }) => [id, source]),
+) as Record<Workstyle, SkillSource>;
+
+const coreComponents: readonly CoreComponent[] = [
+  {
+    label: 'Ponytail',
+    source: { repository: 'DietrichGebert/ponytail', ref: 'main', source: 'skills' },
+  },
+  { label: 'RTK' },
+  { label: 'Codebase Memory MCP' },
+  {
+    label: 'Wigolo',
+    source: { repository: 'KnockOutEZ/wigolo', ref: 'main', source: 'skills' },
+  },
+];
+
+const coreSkills = coreComponents.flatMap(({ source }) => source ? [source] : []);
 
 const optionalSkillGroups: readonly OptionalSkillGroup[] = [
   {
@@ -68,6 +108,10 @@ const optionalSkillGroups: readonly OptionalSkillGroup[] = [
   },
 ];
 
+function isWorkstyle(value: unknown): value is Workstyle {
+  return workstyles.some(({ id }) => id === value);
+}
+
 function skillsFor(
   style: Workstyle = 'caveman',
   optional: readonly string[] = [],
@@ -86,5 +130,5 @@ function skillsFor(
   ];
 }
 
-export { optionalSkillGroups, skillsFor, styleSkills };
-export type { InstallSelection, OptionalSkillGroup, SkillSource, Workstyle };
+export { coreComponents, isWorkstyle, optionalSkillGroups, skillsFor, styleSkills, workstyles };
+export type { InstallSelection, OptionalSkillGroup, SkillSource, Workstyle, WorkstyleOption };

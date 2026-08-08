@@ -21,7 +21,7 @@ Windows:
 irm https://raw.githubusercontent.com/clarifei/codex-hook/main/install.ps1 | iex
 ```
 
-The TUI always installs the core baseline and lets you choose:
+The TUI first asks for a workstyle, then shows the optional collections:
 
 - Workstyle: Caveman (default) or Beeline
 - Matt Pocock engineering and productivity skills
