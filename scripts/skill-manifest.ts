@@ -49,6 +49,7 @@ type OptionalSkill = {
 type SkillRepository = Pick<OptionalSkillGroup, 'id' | 'label'> & {
   repository: string;
   ref: string;
+  excluded?: readonly string[];
 };
 
 const workstyles: readonly WorkstyleOption[] = [
@@ -92,6 +93,7 @@ const skillRepositories: readonly SkillRepository[] = [
     label: 'Emil Kowalski',
     repository: 'emilkowalski/skills',
     ref: 'main',
+    excluded: ['skills/prototype'],
   },
   {
     id: 'deno',
@@ -138,7 +140,7 @@ const skillRepositories: readonly SkillRepository[] = [
 ];
 
 const catalogTtlMs = 60 * 60 * 1000;
-const catalogVersion = 3;
+const catalogVersion = 4;
 const emptyGroups = skillRepositories.map(({ id, label }) => ({
   id,
   label,
@@ -183,6 +185,7 @@ function discoverSkills(
       .map(({ path }) => skillDirectory(path)),
   );
   return [...new Set([...skillDirectories].map((source) => sourceRoot(source, skillDirectories)))]
+    .filter((source) => !repository.excluded?.includes(source))
     .map((source) => {
       const directSkill = skillDirectories.has(source);
       const id = skillId(repository.id, source, directSkill);
@@ -195,7 +198,7 @@ function discoverSkills(
           repository: repository.repository,
           ref: repository.ref,
           source,
-          ...(directSkill ? { destination: id } : {}),
+          destination: skillDestination(repository.id, id),
           exclude: ['README.md'],
         }],
       };
@@ -220,6 +223,10 @@ function skillId(groupId: string, source: string, directSkill: boolean) {
   if (directSkill && source.startsWith('skills/')) return child;
   const family = groupId.split('-').at(-1)!;
   return child === groupId || child.startsWith(`${family}-`) ? child : `${groupId}-${child}`;
+}
+
+function skillDestination(groupId: string, skillId: string) {
+  return `${groupId}/${skillId}`;
 }
 
 function slug(value: string) {

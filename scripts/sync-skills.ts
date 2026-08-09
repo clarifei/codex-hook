@@ -32,6 +32,8 @@ type SyncFile = {
 type SyncOptions = { install?: boolean; refresh?: boolean };
 
 const downloadConcurrency = 12;
+const managedStateVersion = 3;
+
 async function syncSkills(
   codexHome: string,
   selection: Partial<InstallSelection> | Workstyle = {},
@@ -100,7 +102,7 @@ async function syncSkills(
     target: file.target,
   }));
   writeState(statePath, {
-    version: 2,
+    version: managedStateVersion,
     style,
     optional: selected,
     files: desired,
@@ -121,7 +123,7 @@ function uninstallSkills(
     .filter((id) => !requested.has(id));
   const removed = selected.filter((id) => requested.has(id));
   const skillFiles = state.skillFiles;
-  if (state.version === 2 && skillFiles && removed.every((id) => skillFiles[id])) {
+  if (state.version === managedStateVersion && skillFiles && removed.every((id) => skillFiles[id])) {
     const desired = { ...state.files };
     for (const id of removed) {
       for (const relative of skillFiles[id]) delete desired[relative];
@@ -131,7 +133,7 @@ function uninstallSkills(
     );
     const results = pruneManaged(codexHome, state.files, desired);
     writeState(statePath, {
-      version: 2,
+      version: managedStateVersion,
       style: state.style,
       optional,
       files: desired,
@@ -153,7 +155,7 @@ function cachedResults(
   optional: readonly string[],
 ): ManagedResult[] | null {
   if (
-    state.version !== 2 ||
+    state.version !== managedStateVersion ||
     state.style !== style ||
     !sameOptional(state.optional, optional) ||
     !Object.keys(state.files).length
@@ -213,7 +215,8 @@ function targetFor(codexHome: string, relative: string) {
 function readState(statePath: string): ManagedState {
   try {
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-    return state && (state.version === 1 || state.version === 2) && state.files &&
+    return state && (state.version === 1 || state.version === 2 || state.version === managedStateVersion) &&
+        state.files &&
         typeof state.files === 'object'
       ? state as ManagedState
       : { files: {} };

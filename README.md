@@ -37,6 +37,8 @@ the optional catalog is fetched from official repos, cached locally for one hour
 automatically. in the tui, choose `uninstall installed skills` to remove only the skills you mark. the state file is
 generated on the first install at `~/.codex/.codex-hook/skills.json`.
 
+optional skills are kept under `~/.codex/skills/<collection>/<skill>/`.
+
 ## commands
 
 ```sh

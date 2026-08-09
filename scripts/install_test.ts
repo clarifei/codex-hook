@@ -36,7 +36,7 @@ Deno.test('manifest and CLI selection', () => {
   assert(all.some((skill) => skill.repository === 'denoland/skills' && skill.source === 'skills/deno'));
   assert(
     all.some((skill) =>
-      skill.repository === 'tanstack-skills/tanstack-skills' && skill.destination === 'tanstack-query'
+      skill.repository === 'tanstack-skills/tanstack-skills' && skill.destination === 'tanstack/tanstack-query'
     ),
   );
   const optionalSources = optionalSkills.flatMap(({ sources }) => sources);
@@ -74,7 +74,7 @@ Deno.test('discovers new child skills without merging collections', () => {
   ]);
   const added = skills.find(({ id }) => id === 'new-runtime');
   assert(added);
-  assert.equal(added.sources[0].destination, 'new-runtime');
+  assert.equal(added.sources[0].destination, 'deno/new-runtime');
   assert.equal(skills.find(({ id }) => id === 'deno')?.sources[0].source, 'skills/deno');
 });
 
@@ -91,8 +91,8 @@ Deno.test('infers nested collections and root skills', () => {
   assert.deepEqual(
     matt.map(({ id, sources }) => [id, sources[0].source, sources[0].destination]),
     [
-      ['matt-pocock-engineering', 'skills/engineering', undefined],
-      ['matt-pocock-productivity', 'skills/productivity', undefined],
+      ['matt-pocock-engineering', 'skills/engineering', 'matt-pocock/matt-pocock-engineering'],
+      ['matt-pocock-productivity', 'skills/productivity', 'matt-pocock/matt-pocock-productivity'],
     ],
   );
 
@@ -106,15 +106,27 @@ Deno.test('infers nested collections and root skills', () => {
     repository: 'yusukebe/hono-skill',
     ref: 'main',
     source: '',
-    destination: 'hono',
+    destination: 'hono/hono',
     exclude: ['README.md'],
   });
+
+  const emil = discoverSkills({
+    id: 'emil-kowalski',
+    label: 'Emil Kowalski',
+    repository: 'emilkowalski/skills',
+    ref: 'main',
+    excluded: ['skills/prototype'],
+  }, [
+    { path: 'skills/animate/SKILL.md', sha: 'animate', type: 'blob' },
+    { path: 'skills/prototype/SKILL.md', sha: 'prototype', type: 'blob' },
+  ]);
+  assert.deepEqual(emil.map(({ id }) => id), ['animate']);
 });
 
 Deno.test('detects destination skills installed locally', () => {
   const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
   try {
-    installBytes(targetFor(directory, 'tanstack-query/SKILL.md'), new TextEncoder().encode('skill'));
+    installBytes(targetFor(directory, 'tanstack/tanstack-query/SKILL.md'), new TextEncoder().encode('skill'));
     assert.deepEqual(installedSelection(directory), ['tanstack-query']);
   } finally {
     Deno.removeSync(directory, { recursive: true });
@@ -124,12 +136,12 @@ Deno.test('detects destination skills installed locally', () => {
 Deno.test('uses the local cache and uninstalls owned files offline', async () => {
   const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
   try {
-    const relative = 'tanstack-query/SKILL.md';
+    const relative = 'tanstack/tanstack-query/SKILL.md';
     const target = targetFor(directory, relative);
     const bytes = new TextEncoder().encode('cached skill');
     installBytes(target, bytes);
     writeState(path.join(directory, '.codex-hook', 'skills.json'), {
-      version: 2,
+      version: 3,
       style: 'caveman',
       optional: ['tanstack-query'],
       files: { [relative]: gitBlobHash(bytes) },
