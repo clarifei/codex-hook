@@ -32,10 +32,6 @@ type SyncFile = {
 type SyncOptions = { install?: boolean; refresh?: boolean };
 
 const downloadConcurrency = 12;
-const sourceOwners = new Map(
-  optionalSkills.flatMap(({ id, sources }) => sources.map((source) => [source, id] as const)),
-);
-
 async function syncSkills(
   codexHome: string,
   selection: Partial<InstallSelection> | Workstyle = {},
@@ -52,6 +48,9 @@ async function syncSkills(
   if (cached) return cached;
 
   const skills = skillsFor(style, selected, false);
+  const sourceOwners = new Map(
+    optionalSkills.flatMap(({ id, sources }) => sources.map((source) => [source, id] as const)),
+  );
   const treeRequests = new Map<string, Promise<TreeEntry[]>>();
   for (const skill of skills) {
     const key = `${skill.repository}@${skill.ref}`;

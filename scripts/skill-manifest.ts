@@ -1,3 +1,5 @@
+import { tree, type TreeEntry } from './lib/github.ts';
+
 type Workstyle = 'caveman' | 'beeline';
 
 type InstallSelection = {
@@ -42,6 +44,16 @@ type OptionalSkill = {
   sources: readonly SkillSource[];
 };
 
+type SkillDiscovery = {
+  repository: string;
+  ref: string;
+  root: string;
+  layout: 'children' | 'nested-children' | 'plugins';
+  destination: 'child' | 'none';
+  idPrefix?: string;
+  include?: readonly string[];
+};
+
 const workstyles: readonly WorkstyleOption[] = [
   {
     id: 'caveman',
@@ -84,7 +96,7 @@ const coreComponents: readonly CoreComponent[] = [
 
 const coreSkills = coreComponents.flatMap(({ source }) => source ? [source] : []);
 
-const optionalSkillGroups: readonly OptionalSkillGroup[] = [
+const staticOptionalSkillGroups: readonly OptionalSkillGroup[] = [
   {
     id: 'matt-pocock',
     label: 'Matt Pocock',
@@ -303,7 +315,158 @@ const optionalSkillGroups: readonly OptionalSkillGroup[] = [
   },
 ];
 
-const optionalSkills = optionalSkillGroups.flatMap(({ skills }) => skills);
+const discoveries: Record<string, SkillDiscovery> = {
+  'matt-pocock': {
+    repository: 'mattpocock/skills',
+    ref: 'main',
+    root: 'skills',
+    layout: 'nested-children',
+    destination: 'none',
+    idPrefix: 'matt-pocock-',
+    include: ['engineering', 'productivity'],
+  },
+  deno: {
+    repository: 'denoland/skills',
+    ref: 'main',
+    root: 'skills',
+    layout: 'children',
+    destination: 'child',
+  },
+  hono: {
+    repository: 'yusukebe/hono-skill',
+    ref: 'main',
+    root: 'skills',
+    layout: 'children',
+    destination: 'child',
+    include: ['hono'],
+  },
+  mcollina: {
+    repository: 'mcollina/skills',
+    ref: 'main',
+    root: 'skills',
+    layout: 'children',
+    destination: 'child',
+    include: ['fastify', 'skill-optimizer'],
+  },
+  'better-auth': {
+    repository: 'better-auth/skills',
+    ref: 'main',
+    root: 'better-auth',
+    layout: 'children',
+    destination: 'child',
+    idPrefix: 'better-auth-',
+  },
+  'vercel-react': {
+    repository: 'vercel-labs/agent-skills',
+    ref: 'main',
+    root: 'skills',
+    layout: 'children',
+    destination: 'child',
+    include: ['react-best-practices', 'react-view-transitions'],
+  },
+  tanstack: {
+    repository: 'tanstack-skills/tanstack-skills',
+    ref: 'main',
+    root: 'plugins',
+    layout: 'plugins',
+    destination: 'child',
+  },
+};
+
+let optionalSkillGroups: readonly OptionalSkillGroup[] = staticOptionalSkillGroups;
+let optionalSkills = optionalSkillGroups.flatMap(({ skills }) => skills);
+
+async function refreshOptionalSkillGroups(refresh = false) {
+  const updates = await Promise.all(
+    Object.entries(discoveries).map(async ([groupId, discovery]) => {
+      try {
+        const entries = await tree(discovery.repository, discovery.ref, refresh);
+        return [groupId, discoverSkills(groupId, discovery, entries)] as const;
+      } catch {
+        return [groupId, null] as const;
+      }
+    }),
+  );
+  const discovered = new Map(updates);
+  setOptionalSkillGroups(staticOptionalSkillGroups.map((group) => {
+    const skills = discovered.get(group.id);
+    return skills?.length ? { ...group, skills } : group;
+  }));
+}
+
+function setOptionalSkillGroups(groups: readonly OptionalSkillGroup[]) {
+  optionalSkillGroups = groups;
+  optionalSkills = groups.flatMap(({ skills }) => skills);
+}
+
+function discoverSkills(
+  groupId: string,
+  discovery: SkillDiscovery,
+  entries: readonly TreeEntry[],
+): OptionalSkill[] {
+  const roots = skillRoots(discovery, entries);
+  if (!roots.length) return [];
+  const group = staticOptionalSkillGroups.find(({ id }) => id === groupId)!;
+  const known = new Map(
+    group.skills.flatMap((skill) => skill.sources.map((source) => [source.source, skill] as const)),
+  );
+  const discovered = roots.map((source) =>
+    known.get(source) || {
+      id: skillId(groupId, discovery, source),
+      label: humanize(source.split('/').at(-1)!),
+      description: `${group.label} skill`,
+      sources: [{
+        repository: discovery.repository,
+        ref: discovery.ref,
+        source,
+        ...(discovery.destination === 'child' ? { destination: source.split('/').at(-1) } : {}),
+        exclude: ['README.md'],
+      }],
+    }
+  );
+  const preserved = group.skills.filter((skill) =>
+    skill.sources.every(({ repository, ref, source }) =>
+      repository !== discovery.repository || ref !== discovery.ref || !source.startsWith(`${discovery.root}/`)
+    )
+  );
+  return [...discovered, ...preserved].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function skillRoots(discovery: SkillDiscovery, entries: readonly TreeEntry[]): string[] {
+  const files = entries
+    .filter(({ type, path }) => type === 'blob' && path.endsWith('/SKILL.md'))
+    .map(({ path }) => path.slice(0, -'/SKILL.md'.length));
+  const prefix = `${discovery.root}/`;
+  if (discovery.layout === 'plugins') {
+    return files.filter((source) => {
+      const parts = source.split('/');
+      return parts.length === 4 && parts[0] === discovery.root && parts[2] === 'skills' && parts[1] === parts[3] &&
+        (!discovery.include || discovery.include.includes(parts[1]));
+    });
+  }
+  const children = new Set<string>();
+  for (const source of files) {
+    if (!source.startsWith(prefix)) continue;
+    const child = source.slice(prefix.length).split('/')[0];
+    if (!child) continue;
+    if (discovery.include && !discovery.include.includes(child)) continue;
+    if (discovery.layout === 'children' && source !== `${prefix}${child}`) continue;
+    children.add(`${prefix}${child}`);
+  }
+  return [...children];
+}
+
+function skillId(groupId: string, discovery: SkillDiscovery, source: string) {
+  const name = source.split('/').at(-1)!;
+  if (groupId === 'tanstack') return name;
+  return `${discovery.idPrefix || ''}${name}`;
+}
+
+function humanize(value: string) {
+  return value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
 
 // TUI/state selections are leaf IDs; this disambiguates IDs shared by a group and leaf.
 function normalizeOptional(optional: readonly string[], expandGroups = true): string[] {
@@ -343,12 +506,23 @@ function skillsFor(
 
 export {
   coreComponents,
+  discoverSkills,
   isWorkstyle,
   normalizeOptional,
   optionalSkillGroups,
   optionalSkills,
+  refreshOptionalSkillGroups,
+  setOptionalSkillGroups,
   skillsFor,
   styleSkills,
   workstyles,
 };
-export type { InstallSelection, OptionalSkill, OptionalSkillGroup, SkillSource, Workstyle, WorkstyleOption };
+export type {
+  InstallSelection,
+  OptionalSkill,
+  OptionalSkillGroup,
+  SkillDiscovery,
+  SkillSource,
+  Workstyle,
+  WorkstyleOption,
+};

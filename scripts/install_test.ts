@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
 import { gitBlobHash, installBytes } from './lib/files.ts';
-import { optionalSkillGroups, optionalSkills, skillsFor } from './skill-manifest.ts';
+import { discoverSkills, optionalSkillGroups, optionalSkills, skillsFor } from './skill-manifest.ts';
 import { installedSelection, parseArgs } from './selection.ts';
 import { pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState } from './sync-skills.ts';
 
@@ -53,6 +53,24 @@ Deno.test('manifest and CLI selection', () => {
   assert.deepEqual(parseArgs(['--with', 'tanstack-query']).optional, ['tanstack-query']);
   assert.deepEqual(parseArgs(['--uninstall', 'tanstack-query']).uninstall, ['tanstack-query']);
   assert.equal(parseArgs(['--refresh', '--yes']).refresh, true);
+});
+
+Deno.test('discovers new child skills without merging collections', () => {
+  const skills = discoverSkills('deno', {
+    repository: 'denoland/skills',
+    ref: 'main',
+    root: 'skills',
+    layout: 'children',
+    destination: 'child',
+  }, [
+    { path: 'skills/deno/SKILL.md', sha: 'deno', type: 'blob' },
+    { path: 'skills/new-runtime/SKILL.md', sha: 'new', type: 'blob' },
+    { path: 'skills/new-runtime/README.md', sha: 'readme', type: 'blob' },
+  ]);
+  const added = skills.find(({ id }) => id === 'new-runtime');
+  assert(added);
+  assert.equal(added.sources[0].destination, 'new-runtime');
+  assert.equal(skills.find(({ id }) => id === 'deno')?.sources[0].source, 'skills/deno');
 });
 
 Deno.test('detects destination skills installed locally', () => {

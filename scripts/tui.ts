@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import {
   BoxRenderable,
   type CliRenderer,
@@ -16,6 +16,8 @@ import {
   type OptionalSkillGroup,
   optionalSkillGroups,
   optionalSkills,
+  refreshOptionalSkillGroups,
+  setOptionalSkillGroups,
   workstyles,
 } from './skill-manifest.ts';
 
@@ -375,6 +377,9 @@ function toggle(selected: Set<string>, id: string) {
 }
 
 if (import.meta.main) {
+  const manifest = argument('--manifest');
+  if (manifest) setOptionalSkillGroups(JSON.parse(await readFile(manifest, 'utf8')));
+  else await refreshOptionalSkillGroups();
   const selection = await chooseInstall(readDefaults());
   const output = argument('--output');
   if (output) await writeFile(output, JSON.stringify(selection), 'utf8');

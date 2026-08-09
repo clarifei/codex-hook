@@ -38,6 +38,7 @@ the installer asks for a workstyle, then optional skills.
 - vercel react: best practices and view transitions
 - tanstack: choose individual skills in its submenu
 
+the optional list is fetched from the official repos on each run, with the local list as offline fallback.
 installed skills are detected locally, marked `ok` beside their name, and selected automatically.
 in the tui, choose `uninstall installed skills` to remove only the skills you mark.
 the state file is generated on the first install at `~/.codex/.codex-hook/skills.json`.

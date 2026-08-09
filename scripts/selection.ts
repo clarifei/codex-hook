@@ -7,6 +7,7 @@ import {
   normalizeOptional,
   optionalSkillGroups,
   optionalSkills,
+  refreshOptionalSkillGroups,
   type Workstyle,
   workstyles,
 } from './skill-manifest.ts';
@@ -25,6 +26,7 @@ async function chooseSelection(
   codexHome: string,
   args: readonly string[],
 ): Promise<InstallSelection | null> {
+  await refreshOptionalSkillGroups(args.includes('--refresh'));
   const parsed = parseArgs(args);
   const state = readState(path.join(codexHome, '.codex-hook', 'skills.json'));
   const saved = savedSelection(codexHome, state);
@@ -51,7 +53,12 @@ async function chooseWithTui(
     prefix: 'codex-hook-selection-',
     suffix: '.json',
   });
+  const manifest = await Deno.makeTempFile({
+    prefix: 'codex-hook-manifest-',
+    suffix: '.json',
+  });
   try {
+    await Deno.writeTextFile(manifest, JSON.stringify(optionalSkillGroups));
     let status: { success: boolean; code: number };
     try {
       status = await new Deno.Command('bun', {
@@ -62,6 +69,8 @@ async function chooseWithTui(
           output,
           '--defaults',
           JSON.stringify(defaults),
+          '--manifest',
+          manifest,
         ],
         cwd: source,
         stdin: 'inherit',
@@ -78,13 +87,14 @@ async function chooseWithTui(
     return JSON.parse(await Deno.readTextFile(output)) as InstallSelection | null;
   } finally {
     await Deno.remove(output).catch(() => {});
+    await Deno.remove(manifest).catch(() => {});
   }
 }
 
 function savedSelection(codexHome: string, state: ManagedState): InstallSelection {
   const style: Workstyle = isWorkstyle(state.style) ? state.style : installedStyle(codexHome) || 'caveman';
   const optional = Array.isArray(state.optional)
-    ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id)), false)
+    ? normalizeOptional(state.optional.filter((id) => knownOptional().has(id)), false)
     : [];
   return { style, optional };
 }
@@ -95,7 +105,9 @@ function installedSelection(
 ): string[] {
   const root = path.join(codexHome, 'skills');
   const saved = new Set(
-    Array.isArray(state.optional) ? normalizeOptional(state.optional.filter((id) => knownOptional.has(id)), false) : [],
+    Array.isArray(state.optional)
+      ? normalizeOptional(state.optional.filter((id) => knownOptional().has(id)), false)
+      : [],
   );
   const installed = new Set<string>();
   for (const skill of optionalSkills) {
@@ -113,12 +125,15 @@ function installedSelection(
   return [...installed].sort();
 }
 
-const knownOptional = new Set([
-  ...optionalSkillGroups.map(({ id }) => id),
-  ...optionalSkills.map(({ id }) => id),
-]);
+function knownOptional() {
+  return new Set([
+    ...optionalSkillGroups.map(({ id }) => id),
+    ...optionalSkills.map(({ id }) => id),
+  ]);
+}
 
 function parseArgs(args: readonly string[]): InstallArgs {
+  const known = knownOptional();
   const result: InstallArgs = { interactive: args.length === 0 };
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
@@ -134,12 +149,12 @@ function parseArgs(args: readonly string[]): InstallArgs {
     if (argument === '--style' || argument === '--with') {
       if (!args[index + 1]) throw new Error(`${argument} needs a value`);
       if (argument === '--style') result.style = normalizeStyle(args[++index]);
-      else result.optional = parseOptional(args[++index], knownOptional);
+      else result.optional = parseOptional(args[++index], known);
       continue;
     }
     if (argument === '--uninstall') {
       if (!args[index + 1]) throw new Error(`${argument} needs a value`);
-      result.uninstall = parseOptional(args[++index], knownOptional);
+      result.uninstall = parseOptional(args[++index], known);
       continue;
     }
     if (argument.startsWith('--style=')) {
@@ -147,11 +162,11 @@ function parseArgs(args: readonly string[]): InstallArgs {
       continue;
     }
     if (argument.startsWith('--with=')) {
-      result.optional = parseOptional(argument.slice(7), knownOptional);
+      result.optional = parseOptional(argument.slice(7), known);
       continue;
     }
     if (argument.startsWith('--uninstall=')) {
-      result.uninstall = parseOptional(argument.slice(12), knownOptional);
+      result.uninstall = parseOptional(argument.slice(12), known);
       continue;
     }
     if (!argument.startsWith('-') && result.style === undefined) {
