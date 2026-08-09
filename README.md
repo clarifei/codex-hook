@@ -29,7 +29,7 @@ the installer asks for a workstyle, then optional skills.
 
 ## optional skills
 
-- matt pocock: engineering and productivity
+- matt pocock: choose engineering or productivity
 - emil kowalski: design engineering and motion
 - deno: runtime, deploy, frontend, migration, and sandbox
 - hono and elysiajs

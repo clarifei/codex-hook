@@ -89,25 +89,30 @@ const optionalSkillGroups: readonly OptionalSkillGroup[] = [
     id: 'matt-pocock',
     label: 'Matt Pocock',
     description: 'Engineering and productivity workflows',
-    skills: [{
-      id: 'matt-pocock',
-      label: 'Matt Pocock',
-      description: 'Engineering and productivity workflows',
-      sources: [
-        {
+    skills: [
+      {
+        id: 'matt-pocock-engineering',
+        label: 'Engineering',
+        description: 'Engineering workflows and code-quality tools',
+        sources: [{
           repository: 'mattpocock/skills',
           ref: 'main',
           source: 'skills/engineering',
           exclude: ['README.md'],
-        },
-        {
+        }],
+      },
+      {
+        id: 'matt-pocock-productivity',
+        label: 'Productivity',
+        description: 'General planning, communication, and agent-writing tools',
+        sources: [{
           repository: 'mattpocock/skills',
           ref: 'main',
           source: 'skills/productivity',
           exclude: ['README.md'],
-        },
-      ],
-    }],
+        }],
+      },
+    ],
   },
   {
     id: 'emil-kowalski',

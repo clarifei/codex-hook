@@ -7,6 +7,13 @@ import { installedSelection, parseArgs } from './selection.ts';
 import { pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState } from './sync-skills.ts';
 
 Deno.test('manifest and CLI selection', () => {
+  const mattPocock = optionalSkillGroups.find(({ id }) => id === 'matt-pocock')!;
+  assert.deepEqual(mattPocock.skills.map(({ id }) => id), [
+    'matt-pocock-engineering',
+    'matt-pocock-productivity',
+  ]);
+  assert(optionalSkills.every(({ sources }) => sources.length === 1));
+
   const baseline = skillsFor().map((skill) => `${skill.repository}:${skill.source}`).sort();
   assert.deepEqual(baseline, [
     'DietrichGebert/ponytail:skills',
@@ -34,7 +41,7 @@ Deno.test('manifest and CLI selection', () => {
   assert.deepEqual(parseArgs(['--style', 'baseline', '--with', 'matt-pocock']), {
     interactive: false,
     style: 'caveman',
-    optional: ['matt-pocock'],
+    optional: ['matt-pocock-engineering', 'matt-pocock-productivity'],
   });
   assert.deepEqual(parseArgs(['--with', 'deno']).optional, [
     'deno',

@@ -41,17 +41,27 @@ async function installsSelection() {
     assert.match(frame, /Optional skill collections/);
     assert.match(frame, /Engineering and productivity workflows/);
 
+    view.mockInput.pressEnter();
+    await view.flush();
+    frame = view.captureCharFrame();
+    assert.match(frame, /Matt Pocock skills/);
+    assert.match(frame, /Engineering/);
+    assert.match(frame, /Productivity/);
     view.mockInput.pressKey(' ');
     await view.flush();
     frame = view.captureCharFrame();
-    assert.match(frame, /\[x\] Matt Pocock/);
-    assert.match(frame, /Optional: Matt Pocock/);
+    assert.match(frame, /\[x\] Engineering/);
+    const mattSkills = optionalSkillGroups.find(({ id }) => id === 'matt-pocock')!.skills;
+    for (let index = 0; index < mattSkills.length; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    await view.flush();
+    assert.match(view.captureCharFrame(), /Optional: Matt Pocock 1\/2/);
 
     for (let index = 0; index < optionalSkillGroups.length; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     assert.deepEqual(await within(selection, 'Enter did not install'), {
       style: 'beeline',
-      optional: ['matt-pocock'],
+      optional: ['matt-pocock-engineering'],
     });
   } finally {
     view.renderer.destroy();
