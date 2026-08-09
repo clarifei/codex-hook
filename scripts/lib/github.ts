@@ -9,12 +9,21 @@ type TreeResponse = {
   truncated: boolean;
 };
 
+type JsDelivrTreeResponse = {
+  files: { name: string; hash: string }[];
+};
+
 const treeCache = new Map<string, Promise<TreeEntry[]>>();
 
-async function json<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/vnd.github+json',
+      'user-agent': 'codex-hook',
+    },
+  });
   if (!response.ok) {
-    throw new Error(`github request failed: ${response.status}`);
+    throw new Error(`request failed: ${response.status} ${response.statusText}`);
   }
   return await response.json() as T;
 }
@@ -25,12 +34,7 @@ async function tree(repository: string, ref: string, refresh = false): Promise<T
     const cached = treeCache.get(key);
     if (cached) return cached;
   }
-  const request = json<TreeResponse>(
-    `https://api.github.com/repos/${repository}/git/trees/${ref}?recursive=1`,
-  ).then((result) => {
-    if (result.truncated) throw new Error(`github tree truncated: ${repository}`);
-    return result.tree.filter((entry) => entry.type === 'blob');
-  });
+  const request = githubTree(repository, ref).catch(() => jsDelivrTree(repository, ref));
   treeCache.set(key, request);
   try {
     return await request;
@@ -45,13 +49,26 @@ async function bytes(
   ref: string,
   file: string,
 ): Promise<Uint8Array> {
-  const response = await fetch(
-    `https://raw.githubusercontent.com/${repository}/${ref}/${file}`,
+  const response = await fetch(`https://raw.githubusercontent.com/${repository}/${ref}/${file}`).catch(() => null);
+  if (response?.ok) return new Uint8Array(await response.arrayBuffer());
+  const fallback = await fetch(`https://cdn.jsdelivr.net/gh/${repository}@${ref}/${file}`);
+  if (fallback.ok) return new Uint8Array(await fallback.arrayBuffer());
+  throw new Error(`skill download failed: ${repository}/${file}`);
+}
+
+async function githubTree(repository: string, ref: string): Promise<TreeEntry[]> {
+  const result = await fetchJson<TreeResponse>(
+    `https://api.github.com/repos/${repository}/git/trees/${ref}?recursive=1`,
   );
-  if (!response.ok) {
-    throw new Error(`skill download failed: ${repository}/${file}`);
-  }
-  return new Uint8Array(await response.arrayBuffer());
+  if (result.truncated) throw new Error(`github tree truncated: ${repository}`);
+  return result.tree.filter((entry) => entry.type === 'blob');
+}
+
+async function jsDelivrTree(repository: string, ref: string): Promise<TreeEntry[]> {
+  const result = await fetchJson<JsDelivrTreeResponse>(
+    `https://data.jsdelivr.com/v1/package/gh/${repository}@${ref}/flat`,
+  );
+  return result.files.map(({ name, hash }) => ({ path: name.slice(1), sha: hash, type: 'blob' }));
 }
 
 export { bytes, tree };

@@ -195,7 +195,7 @@ function installMenu(
     const toggleOptional = (index: number, option: SelectOption | null) => {
       if (stage === 'groups') {
         const group = optionalSkillGroups.find(({ id }) => id === option?.value);
-        if (!group) return;
+        if (!group?.skills.length) return;
         if (group.skills.length > 1) {
           showSkills(group);
           return;
@@ -363,11 +363,12 @@ function selectionSummary(style: InstallSelection['style'], selected: Set<string
 
 function groupMark(group: OptionalSkillGroup, selected: Set<string>) {
   const count = group.skills.filter(({ id }) => selected.has(id)).length;
-  return count === group.skills.length ? 'x' : count ? '-' : ' ';
+  return group.skills.length && count === group.skills.length ? 'x' : count ? '-' : ' ';
 }
 
 function groupStatus(group: OptionalSkillGroup, installed: Set<string>) {
   const count = group.skills.filter(({ id }) => installed.has(id)).length;
+  if (!group.skills.length) return '  unavailable';
   return count === group.skills.length ? '  ok' : count ? '  partial' : '';
 }
 

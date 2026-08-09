@@ -12,7 +12,7 @@ function gitBlobHash(bytes: Uint8Array) {
   return result.digest('hex');
 }
 
-function sameGitBlob(target: string, expected: string) {
+function sameBlobHash(target: string, expected: string) {
   let bytes;
   try {
     bytes = fs.readFileSync(target);
@@ -20,7 +20,9 @@ function sameGitBlob(target: string, expected: string) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error;
   }
-  return gitBlobHash(bytes) === expected;
+  return /^[\da-f]{40}$/i.test(expected)
+    ? gitBlobHash(bytes) === expected
+    : crypto.createHash('sha256').update(bytes).digest('base64') === expected;
 }
 
 function installBytes(target: string, bytes: Uint8Array): InstallAction {
@@ -53,5 +55,5 @@ function copyTree(source: string, target: string, report: InstallReport) {
   }
 }
 
-export { copyTree, gitBlobHash, installBytes, installFile, sameGitBlob, writeBytes };
+export { copyTree, gitBlobHash, installBytes, installFile, sameBlobHash, writeBytes };
 export type { InstallAction, InstallReport };

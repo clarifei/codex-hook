@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
-import { gitBlobHash, installBytes } from './lib/files.ts';
-import { discoverSkills, optionalSkillGroups, optionalSkills, skillsFor } from './skill-manifest.ts';
+import { gitBlobHash, installBytes, sameBlobHash } from './lib/files.ts';
+import {
+  discoverSkills,
+  optionalSkillGroups,
+  optionalSkills,
+  setOptionalSkillGroups,
+  skillsFor,
+} from './skill-manifest.ts';
 import { installedSelection, parseArgs } from './selection.ts';
 import { pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState } from './sync-skills.ts';
+import { testOptionalSkillGroups } from './test-manifest.ts';
+
+setOptionalSkillGroups(testOptionalSkillGroups);
 
 Deno.test('manifest and CLI selection', () => {
   const mattPocock = optionalSkillGroups.find(({ id }) => id === 'matt-pocock')!;
@@ -22,8 +32,7 @@ Deno.test('manifest and CLI selection', () => {
   ]);
 
   const all = skillsFor('beeline', optionalSkillGroups.map(({ id }) => id));
-  assert.equal(all.length, 37);
-  assert(all.find((skill) => skill.repository === 'emilkowalski/skills')?.exclude?.includes('prototype'));
+  assert.equal(all.length, 3 + optionalSkills.length);
   assert(all.some((skill) => skill.repository === 'denoland/skills' && skill.source === 'skills/deno'));
   assert(
     all.some((skill) =>
@@ -46,9 +55,6 @@ Deno.test('manifest and CLI selection', () => {
   assert.deepEqual(parseArgs(['--with', 'deno']).optional, [
     'deno',
     'deno-deploy',
-    'deno-frontend',
-    'deno-sandbox',
-    'migrate-to-deno',
   ]);
   assert.deepEqual(parseArgs(['--with', 'tanstack-query']).optional, ['tanstack-query']);
   assert.deepEqual(parseArgs(['--uninstall', 'tanstack-query']).uninstall, ['tanstack-query']);
@@ -56,12 +62,11 @@ Deno.test('manifest and CLI selection', () => {
 });
 
 Deno.test('discovers new child skills without merging collections', () => {
-  const skills = discoverSkills('deno', {
+  const skills = discoverSkills({
+    id: 'deno',
+    label: 'Deno',
     repository: 'denoland/skills',
     ref: 'main',
-    root: 'skills',
-    layout: 'children',
-    destination: 'child',
   }, [
     { path: 'skills/deno/SKILL.md', sha: 'deno', type: 'blob' },
     { path: 'skills/new-runtime/SKILL.md', sha: 'new', type: 'blob' },
@@ -71,6 +76,39 @@ Deno.test('discovers new child skills without merging collections', () => {
   assert(added);
   assert.equal(added.sources[0].destination, 'new-runtime');
   assert.equal(skills.find(({ id }) => id === 'deno')?.sources[0].source, 'skills/deno');
+});
+
+Deno.test('infers nested collections and root skills', () => {
+  const matt = discoverSkills({
+    id: 'matt-pocock',
+    label: 'Matt Pocock',
+    repository: 'mattpocock/skills',
+    ref: 'main',
+  }, [
+    { path: 'skills/engineering/review/SKILL.md', sha: 'engineering', type: 'blob' },
+    { path: 'skills/productivity/planning/SKILL.md', sha: 'productivity', type: 'blob' },
+  ]);
+  assert.deepEqual(
+    matt.map(({ id, sources }) => [id, sources[0].source, sources[0].destination]),
+    [
+      ['matt-pocock-engineering', 'skills/engineering', undefined],
+      ['matt-pocock-productivity', 'skills/productivity', undefined],
+    ],
+  );
+
+  const root = discoverSkills({
+    id: 'hono',
+    label: 'Hono',
+    repository: 'yusukebe/hono-skill',
+    ref: 'main',
+  }, [{ path: 'SKILL.md', sha: 'hono', type: 'blob' }]);
+  assert.deepEqual(root[0]?.sources[0], {
+    repository: 'yusukebe/hono-skill',
+    ref: 'main',
+    source: '',
+    destination: 'hono',
+    exclude: ['README.md'],
+  });
 });
 
 Deno.test('detects destination skills installed locally', () => {
@@ -115,6 +153,19 @@ Deno.test('uses the local cache and uninstalls owned files offline', async () =>
 Deno.test('managed paths reject collisions and escapes', () => {
   assert.throws(() => reserve(new Set(['duplicate']), 'duplicate'), /^Error: duplicate skill target:/);
   assert.throws(() => targetFor('/tmp/codex-hook-test', '../escape'), /^Error: invalid skill target:/);
+});
+
+Deno.test('recognizes GitHub and jsDelivr file hashes', () => {
+  const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
+  try {
+    const bytes = new TextEncoder().encode('skill');
+    const target = targetFor(directory, 'hash/SKILL.md');
+    installBytes(target, bytes);
+    assert(sameBlobHash(target, gitBlobHash(bytes)));
+    assert(sameBlobHash(target, crypto.createHash('sha256').update(bytes).digest('base64')));
+  } finally {
+    Deno.removeSync(directory, { recursive: true });
+  }
 });
 
 Deno.test('managed files and MCP config are idempotent', () => {

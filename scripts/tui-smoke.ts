@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { createTestRenderer } from '@opentui/core/testing';
-import { type InstallSelection, optionalSkillGroups, workstyles } from './skill-manifest.ts';
+import { type InstallSelection, optionalSkillGroups, setOptionalSkillGroups, workstyles } from './skill-manifest.ts';
+import { testOptionalSkillGroups } from './test-manifest.ts';
 import { installMenu } from './tui.ts';
+
+setOptionalSkillGroups(testOptionalSkillGroups);
 
 const defaults: InstallSelection = { style: 'caveman', optional: [] };
 
@@ -196,7 +199,7 @@ async function opensCollectionSubmenu() {
     await view.flush();
     frame = view.captureCharFrame();
     assert.match(frame, /Optional skill collections/);
-    assert.match(frame, /Optional: TanStack 1\/14/);
+    assert.match(frame, /Optional: TanStack 1\/2/);
     view.mockInput.pressCtrlC();
     assert.equal(await within(selection, 'Ctrl-C did not cancel submenu'), null);
   } finally {

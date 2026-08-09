@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { type InstallAction, sameGitBlob, writeBytes } from './lib/files.ts';
+import { type InstallAction, sameBlobHash, writeBytes } from './lib/files.ts';
 import { bytes, tree, type TreeEntry } from './lib/github.ts';
 import {
   type InstallSelection,
@@ -68,8 +68,8 @@ async function syncSkills(
   for (const skill of skills) {
     const key = `${skill.repository}@${skill.ref}`;
     for (const entry of trees.get(key) ?? []) {
-      if (!entry.path.startsWith(`${skill.source}/`)) continue;
-      const inner = entry.path.slice(skill.source.length + 1);
+      if (skill.source && !entry.path.startsWith(`${skill.source}/`)) continue;
+      const inner = skill.source ? entry.path.slice(skill.source.length + 1) : entry.path;
       if (excluded(skill, inner)) continue;
       const relative = skill.destination ? `${skill.destination}/${inner}` : inner;
       reserve(targets, relative);
@@ -85,7 +85,7 @@ async function syncSkills(
     ? files.map((file) => ({ ...file, action: 'skip' as const, target: targetFor(codexHome, file.relative) }))
     : await mapConcurrent(files, downloadConcurrency, async (file) => {
       const target = targetFor(codexHome, file.relative);
-      if (sameGitBlob(target, file.sha)) {
+      if (sameBlobHash(target, file.sha)) {
         return { ...file, action: 'skip' as const, target };
       }
       return {
@@ -161,7 +161,7 @@ function cachedResults(
   const results: ManagedResult[] = [];
   for (const [relative, sha] of Object.entries(state.files)) {
     const target = targetFor(codexHome, relative);
-    if (!sameGitBlob(target, sha)) return null;
+    if (!sameBlobHash(target, sha)) return null;
     results.push({ action: 'skip', target });
   }
   return results;
@@ -242,7 +242,7 @@ function pruneManaged(
     if (desired[relative]) continue;
     const target = targetFor(codexHome, relative);
     if (!fs.existsSync(target)) continue;
-    if (!sameGitBlob(target, sha)) {
+    if (!sameBlobHash(target, sha)) {
       results.push({ action: 'preserve', target });
       continue;
     }

@@ -26,7 +26,10 @@ async function chooseSelection(
   codexHome: string,
   args: readonly string[],
 ): Promise<InstallSelection | null> {
-  await refreshOptionalSkillGroups(args.includes('--refresh'));
+  await refreshOptionalSkillGroups(
+    path.join(codexHome, '.codex-hook', 'skill-catalog.json'),
+    args.includes('--refresh'),
+  );
   const parsed = parseArgs(args);
   const state = readState(path.join(codexHome, '.codex-hook', 'skills.json'));
   const saved = savedSelection(codexHome, state);
