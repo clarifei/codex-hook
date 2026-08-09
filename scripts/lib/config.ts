@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 type TextChange = { changed: boolean; text: string };
+type ProviderSection = { end: number; section: string; start: number };
+
+const headroomBridgeUrl = 'http://127.0.0.1:8788';
 
 function disablePonytail(configPath: string) {
   const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
@@ -22,6 +25,86 @@ function ensureCodebaseMemory(configPath: string) {
     '-y',
     'codebase-memory-mcp',
   ], true);
+}
+
+function ensureHeadroomBridge(configPath: string) {
+  const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+  const provider = activeProviderSection(original);
+  if (!provider) return false;
+  const baseUrl = provider.section.match(/^base_url\s*=\s*"([^"]+)"\s*$/m);
+  if (!baseUrl || baseUrl[1] === headroomBridgeUrl) return false;
+
+  try {
+    const upstream = new URL(baseUrl[1]);
+    if (!['http:', 'https:'].includes(upstream.protocol) || upstream.hostname !== 'pool.afterinput.com') return false;
+  } catch {
+    return false;
+  }
+
+  const statePath = path.join(path.dirname(configPath), '.codex-hook', 'headroom-bridge.json');
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(statePath, `${JSON.stringify({ upstream: baseUrl[1] }, null, 2)}\n`, 'utf8');
+  const updated = provider.section.replace(baseUrl[0], `base_url = "${headroomBridgeUrl}"`);
+  fs.writeFileSync(
+    configPath,
+    original.slice(0, provider.start) + updated + original.slice(provider.end),
+    'utf8',
+  );
+  return true;
+}
+
+function disableHeadroomBridge(configPath: string) {
+  const statePath = path.join(path.dirname(configPath), '.codex-hook', 'headroom-bridge.json');
+  let upstream: string;
+  try {
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    if (typeof state.upstream !== 'string') return false;
+    const url = new URL(state.upstream);
+    if (!['http:', 'https:'].includes(url.protocol) || url.hostname !== 'pool.afterinput.com') return false;
+    upstream = url.toString().replace(/\/$/, '');
+  } catch {
+    return false;
+  }
+
+  const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+  const provider = activeProviderSection(original);
+  const baseUrl = provider?.section.match(/^base_url\s*=\s*"([^"]+)"\s*$/m);
+  if (provider && baseUrl?.[1] === headroomBridgeUrl) {
+    const updated = provider.section.replace(baseUrl[0], `base_url = ${JSON.stringify(upstream)}`);
+    fs.writeFileSync(
+      configPath,
+      original.slice(0, provider.start) + updated + original.slice(provider.end),
+      'utf8',
+    );
+  }
+  fs.rmSync(statePath, { force: true });
+  return true;
+}
+
+function headroomBridgeEnabled(configPath: string) {
+  const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+  const section = activeProviderSection(original)?.section;
+  if (section?.match(/^base_url\s*=\s*"([^"]+)"\s*$/m)?.[1] !== headroomBridgeUrl) return false;
+  try {
+    const state = JSON.parse(
+      fs.readFileSync(path.join(path.dirname(configPath), '.codex-hook', 'headroom-bridge.json'), 'utf8'),
+    );
+    return typeof state.upstream === 'string';
+  } catch {
+    return false;
+  }
+}
+
+function activeProviderSection(text: string): ProviderSection | null {
+  const provider = text.match(/^model_provider\s*=\s*"([^"]+)"\s*$/m)?.[1];
+  if (!provider) return null;
+  const header = `[model_providers.${provider}]`;
+  const start = text.indexOf(header);
+  if (start < 0) return null;
+  const afterHeader = start + header.length;
+  const boundary = text.slice(afterHeader).match(/\r?\n\[/);
+  const end = boundary ? afterHeader + (boundary.index ?? 0) : text.length;
+  return { end, section: text.slice(start, end), start };
 }
 
 function ensureMcpServer(
@@ -105,4 +188,13 @@ function disable(text: string): TextChange {
   };
 }
 
-export { disable, disablePonytail, ensureCodebaseMemory, ensureMcpServer, ensureWigolo };
+export {
+  disable,
+  disableHeadroomBridge,
+  disablePonytail,
+  ensureCodebaseMemory,
+  ensureHeadroomBridge,
+  ensureMcpServer,
+  ensureWigolo,
+  headroomBridgeEnabled,
+};

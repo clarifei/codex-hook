@@ -4,7 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { disablePonytail, ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
+import {
+  disableHeadroomBridge,
+  disablePonytail,
+  ensureCodebaseMemory,
+  ensureHeadroomBridge,
+  ensureWigolo,
+} from './lib/config.ts';
 import { copyTree, installFile } from './lib/files.ts';
 import { ensureRtk } from './lib/rtk.ts';
 import { type InstallSelection, optionalSkillGroups, type Workstyle, workstyles } from './skill-manifest.ts';
@@ -21,6 +27,8 @@ type PrintedSummary = {
   files: Summary;
   ponytailChanged: boolean;
   codebaseMemoryChanged: boolean;
+  headroomChanged: boolean;
+  headroomEnabled: boolean;
   wigoloChanged: boolean;
 };
 
@@ -77,6 +85,8 @@ async function main() {
   const configPath = path.join(codexHome, 'config.toml');
   const ponytailChanged = disablePonytail(configPath);
   const codebaseMemoryChanged = ensureCodebaseMemory(configPath);
+  const headroomEnabled = selection.headroom === true;
+  const headroomChanged = headroomEnabled ? ensureHeadroomBridge(configPath) : disableHeadroomBridge(configPath);
   const wigoloChanged = ensureWigolo(configPath);
   printSummary({
     codexHome,
@@ -90,6 +100,8 @@ async function main() {
     files: summarize(fileResults),
     ponytailChanged,
     codebaseMemoryChanged,
+    headroomChanged,
+    headroomEnabled,
     wigoloChanged,
   });
 }
@@ -136,6 +148,8 @@ function printSummary({
   files,
   ponytailChanged,
   codebaseMemoryChanged,
+  headroomChanged,
+  headroomEnabled,
   wigoloChanged,
 }: PrintedSummary) {
   const selected = new Set(selection.optional);
@@ -154,6 +168,13 @@ codex-hook install complete
   config   ${ponytailChanged ? 'ponytail hook disabled' : 'ponytail hook already disabled'}
   mcp      codebase-memory ${codebaseMemoryChanged ? 'configured' : 'already configured'}
   mcp      wigolo ${wigoloChanged ? 'configured' : 'already configured'}
+  headroom ${
+    headroomEnabled
+      ? headroomChanged ? 'Afterinput bridge configured' : 'Afterinput bridge already configured'
+      : headroomChanged
+      ? 'disabled; Afterinput upstream restored'
+      : 'disabled'
+  }
   home     ${codexHome}
 
 Next steps

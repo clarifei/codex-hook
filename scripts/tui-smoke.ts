@@ -9,6 +9,7 @@ setOptionalSkillGroups(testOptionalSkillGroups);
 const defaults: InstallSelection = { style: 'caveman', optional: [] };
 
 await installsSelection();
+await togglesHeadroom();
 await selectsSingleDenoSkill();
 await opensCollectionSubmenu();
 await uninstallsInstalledSkill();
@@ -24,6 +25,7 @@ async function installsSelection() {
     let frame = view.captureCharFrame();
     assert.match(frame, /Step 1 of 2/);
     assert.match(frame, /Choose a workstyle/);
+    assert.match(frame, /\[ \] Headroom/);
     assert.match(frame, /Terse, direct responses/);
     assert.match(frame, /Cancel/);
     const lines = frame.split('\n');
@@ -63,8 +65,32 @@ async function installsSelection() {
     for (let index = 0; index < optionalSkillGroups.length; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     assert.deepEqual(await within(selection, 'Enter did not install'), {
+      headroom: false,
       style: 'beeline',
       optional: ['matt-pocock-engineering'],
+    });
+  } finally {
+    view.renderer.destroy();
+  }
+}
+
+async function togglesHeadroom() {
+  const view = await createTestRenderer({ width: 72, height: 20 });
+  try {
+    const selection = installMenu(view.renderer, defaults);
+    for (let index = 0; index < workstyles.length; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressKey(' ');
+    await view.flush();
+    assert.match(view.captureCharFrame(), /\[x\] Headroom/);
+    for (let index = 0; index < workstyles.length; index++) view.mockInput.pressArrow('up');
+    view.mockInput.pressEnter();
+    await view.flush();
+    for (let index = 0; index < optionalSkillGroups.length; index++) view.mockInput.pressArrow('down');
+    view.mockInput.pressEnter();
+    assert.deepEqual(await within(selection, 'Headroom selection did not install'), {
+      headroom: true,
+      style: 'caveman',
+      optional: [],
     });
   } finally {
     view.renderer.destroy();
@@ -75,7 +101,7 @@ async function cancelsFromMenu() {
   const view = await createTestRenderer({ width: 72, height: 20 });
   try {
     const selection = installMenu(view.renderer, defaults);
-    for (let index = 0; index < workstyles.length; index++) view.mockInput.pressArrow('down');
+    for (let index = 0; index < workstyles.length + 1; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     assert.equal(await within(selection, 'Cancel option did not cancel'), null);
   } finally {
@@ -118,6 +144,7 @@ async function selectsSingleDenoSkill() {
     for (let index = 0; index < optionalSkillGroups.length; index++) view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     assert.deepEqual(await within(selection, 'Single Deno skill did not install'), {
+      headroom: false,
       style: 'caveman',
       optional: ['deno'],
     });
@@ -163,6 +190,7 @@ async function uninstallsInstalledSkill() {
     view.mockInput.pressArrow('down');
     view.mockInput.pressEnter();
     assert.deepEqual(await within(selection, 'Uninstall did not finish'), {
+      headroom: false,
       style: 'caveman',
       optional: [],
       uninstall: ['tanstack-query'],

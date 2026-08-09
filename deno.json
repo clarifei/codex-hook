@@ -10,6 +10,7 @@
   },
   "tasks": {
     "check": "deno fmt --check deno.json package.json hooks.json scripts hooks && deno lint scripts hooks && deno check scripts/*.ts scripts/lib/*.ts hooks/*.ts hooks/lib/*.ts",
+    "headroom": "deno run --allow-env --allow-read --allow-write --allow-sys scripts/enable-headroom.ts",
     "install": "deno run -A scripts/install.ts",
     "test": "deno test -A scripts/install_test.ts",
     "tui:smoke": "bun run scripts/tui-smoke.ts"

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { installedStyle } from '../hooks/lib/style.ts';
+import { headroomBridgeEnabled } from './lib/config.ts';
 import {
   type InstallSelection,
   isWorkstyle,
@@ -14,6 +15,7 @@ import {
 import { type ManagedState, readState } from './sync-skills.ts';
 
 type InstallArgs = {
+  headroom?: boolean;
   interactive: boolean;
   style?: Workstyle;
   optional?: string[];
@@ -35,6 +37,7 @@ async function chooseSelection(
   const saved = savedSelection(codexHome, state);
   const installed = installedSelection(codexHome, state);
   const initial: InstallSelection = {
+    headroom: parsed.headroom ?? saved.headroom ?? false,
     style: parsed.style || saved.style,
     optional: parsed.optional === undefined
       ? normalizeOptional([...saved.optional, ...installed], false)
@@ -99,7 +102,11 @@ function savedSelection(codexHome: string, state: ManagedState): InstallSelectio
   const optional = Array.isArray(state.optional)
     ? normalizeOptional(state.optional.filter((id) => knownOptional().has(id)), false)
     : [];
-  return { style, optional };
+  return {
+    headroom: headroomBridgeEnabled(path.join(codexHome, 'config.toml')),
+    style,
+    optional,
+  };
 }
 
 function installedSelection(
@@ -141,6 +148,14 @@ function parseArgs(args: readonly string[]): InstallArgs {
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
     if (argument === '--yes') continue;
+    if (argument === '--headroom') {
+      result.headroom = true;
+      continue;
+    }
+    if (argument === '--no-headroom') {
+      result.headroom = false;
+      continue;
+    }
     if (argument === '--refresh') {
       result.refresh = true;
       continue;
@@ -178,7 +193,7 @@ function parseArgs(args: readonly string[]): InstallArgs {
     }
     const styles = workstyles.map(({ id }) => id).join('|');
     throw new Error(
-      `usage: install [${styles}] [--with group-or-skill,...] [--uninstall group-or-skill,...] [--all] [--refresh] [--yes] (got ${argument})`,
+      `usage: install [${styles}] [--headroom|--no-headroom] [--with group-or-skill,...] [--uninstall group-or-skill,...] [--all] [--refresh] [--yes] (got ${argument})`,
     );
   }
   return result;

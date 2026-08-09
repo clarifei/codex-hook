@@ -5,6 +5,7 @@ import { tree, type TreeEntry } from './lib/github.ts';
 type Workstyle = 'caveman' | 'beeline';
 
 type InstallSelection = {
+  headroom?: boolean;
   style: Workstyle;
   optional: string[];
   installed?: string[];

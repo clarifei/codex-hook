@@ -26,6 +26,7 @@ const INSTALL = Symbol('install');
 const UNINSTALL = Symbol('uninstall');
 const CANCEL = Symbol('cancel');
 const BACK = Symbol('back');
+const HEADROOM = Symbol('headroom');
 const cancelOption: SelectOption = {
   name: 'Cancel',
   description: 'Leave the current installation unchanged',
@@ -48,6 +49,7 @@ function installMenu(
   defaults: InstallSelection,
 ): Promise<InstallSelection | null> {
   const selected = new Set(normalizeOptional(defaults.optional, false));
+  let headroom = defaults.headroom ?? false;
   let style = defaults.style;
   let stage: 'style' | 'groups' | 'skills' | 'uninstall' = 'style';
   let activeGroup: OptionalSkillGroup | null = null;
@@ -81,8 +83,8 @@ function installMenu(
   });
   const menu = new SelectRenderable(renderer, {
     width: '100%',
-    height: Math.min(workstyleOptions().length, menuHeight),
-    options: workstyleOptions(),
+    height: Math.min(workstyleOptions(headroom).length, menuHeight),
+    options: workstyleOptions(headroom),
     selectedIndex: Math.max(0, workstyles.findIndex(({ id }) => id === style)),
     backgroundColor: 'transparent',
     focusedBackgroundColor: 'transparent',
@@ -104,7 +106,7 @@ function installMenu(
     truncate: true,
   });
   const heading = new TextRenderable(renderer, {
-    content: 'Choose a workstyle',
+    content: 'Choose a workstyle and integrations',
     height: 1,
     fg: headingColor,
     bg: background,
@@ -118,7 +120,7 @@ function installMenu(
     truncate: true,
   });
   const summary = new TextRenderable(renderer, {
-    content: selectionSummary(style, selected),
+    content: selectionSummary(style, selected, headroom),
     height: 1,
     fg: positive,
     bg: background,
@@ -161,9 +163,9 @@ function installMenu(
       stage = 'style';
       activeGroup = null;
       subtitle.content = 'Step 1 of 2';
-      heading.content = 'Choose a workstyle';
-      summary.content = selectionSummary(style, selected);
-      setMenu(workstyleOptions(), Math.max(0, workstyles.findIndex(({ id }) => id === style)));
+      heading.content = 'Choose a workstyle and integrations';
+      summary.content = selectionSummary(style, selected, headroom);
+      setMenu(workstyleOptions(headroom), Math.max(0, workstyles.findIndex(({ id }) => id === style)));
     };
 
     const showOptional = () => {
@@ -171,7 +173,7 @@ function installMenu(
       activeGroup = null;
       subtitle.content = 'Step 2 of 2';
       heading.content = 'Optional skill collections';
-      summary.content = selectionSummary(style, selected);
+      summary.content = selectionSummary(style, selected, headroom);
       setMenu(optionalOptions(selected, installed), 0);
     };
 
@@ -192,6 +194,12 @@ function installMenu(
       setMenu(uninstallOptions(installed, uninstallSelected), 0);
     };
 
+    const toggleHeadroom = (index: number) => {
+      headroom = !headroom;
+      summary.content = selectionSummary(style, selected, headroom);
+      setMenu(workstyleOptions(headroom), index);
+    };
+
     const toggleOptional = (index: number, option: SelectOption | null) => {
       if (stage === 'groups') {
         const group = optionalSkillGroups.find(({ id }) => id === option?.value);
@@ -201,7 +209,7 @@ function installMenu(
           return;
         }
         toggle(selected, group.skills[0].id);
-        summary.content = selectionSummary(style, selected);
+        summary.content = selectionSummary(style, selected, headroom);
         setMenu(optionalOptions(selected, installed), index);
         return;
       }
@@ -216,7 +224,7 @@ function installMenu(
       const skill = activeGroup.skills.find(({ id }) => id === option?.value);
       if (!skill) return;
       toggle(selected, skill.id);
-      summary.content = selectionSummary(style, selected);
+      summary.content = selectionSummary(style, selected, headroom);
       setMenu(skillOptions(activeGroup, selected, installed), index);
     };
 
@@ -229,6 +237,10 @@ function installMenu(
         return;
       }
       if (stage === 'style') {
+        if (option.value === HEADROOM) {
+          toggleHeadroom(index);
+          return;
+        }
         const workstyle = workstyles.find(({ id }) => id === option.value);
         if (!workstyle) return;
         style = workstyle.id;
@@ -240,13 +252,14 @@ function installMenu(
         return;
       }
       if (option.value === INSTALL) {
-        finish({ style, optional: [...selected].sort() });
+        finish({ headroom, style, optional: [...selected].sort() });
         return;
       }
       if (option.value === UNINSTALL) {
         if (stage === 'uninstall') {
           if (uninstallSelected.size) {
             finish({
+              headroom,
               style,
               optional: [...selected].sort(),
               uninstall: [...uninstallSelected].sort(),
@@ -264,7 +277,9 @@ function installMenu(
         return true;
       }
       if (sequence === ' ') {
-        if (stage !== 'style') toggleOptional(menu.getSelectedIndex(), menu.getSelectedOption());
+        if (stage === 'style' && menu.getSelectedOption()?.value === HEADROOM) {
+          toggleHeadroom(menu.getSelectedIndex());
+        } else if (stage !== 'style') toggleOptional(menu.getSelectedIndex(), menu.getSelectedOption());
         return true;
       }
       if (sequence !== '\x1b') return false;
@@ -280,13 +295,18 @@ function installMenu(
   });
 }
 
-function workstyleOptions(): SelectOption[] {
+function workstyleOptions(headroom: boolean): SelectOption[] {
   return [
     ...workstyles.map(({ id, label, description }) => ({
       name: label,
       description,
       value: id,
     })),
+    {
+      name: `[${headroom ? 'x' : ' '}] Headroom`,
+      description: 'Compress Codex tool output through the local Headroom bridge',
+      value: HEADROOM,
+    },
     cancelOption,
   ];
 }
@@ -351,14 +371,14 @@ function uninstallOptions(installed: Set<string>, selected: Set<string>): Select
   ];
 }
 
-function selectionSummary(style: InstallSelection['style'], selected: Set<string>) {
+function selectionSummary(style: InstallSelection['style'], selected: Set<string>, headroom: boolean) {
   const label = workstyles.find(({ id }) => id === style)?.label ?? style;
   const optional = optionalSkillGroups.flatMap((group) => {
     const count = group.skills.filter(({ id }) => selected.has(id)).length;
     if (!count) return [];
     return group.skills.length === 1 ? [group.label] : [`${group.label} ${count}/${group.skills.length}`];
   }).join(', ') || 'none';
-  return `Selected: ${label} | Optional: ${optional}`;
+  return `Selected: ${label} | Headroom: ${headroom ? 'on' : 'off'} | Optional: ${optional}`;
 }
 
 function groupMark(group: OptionalSkillGroup, selected: Set<string>) {
@@ -394,7 +414,7 @@ function argument(name: string) {
 
 function readDefaults(): InstallSelection {
   const value = argument('--defaults');
-  return value ? JSON.parse(value) : { style: 'caveman', optional: [] };
+  return value ? JSON.parse(value) : { headroom: false, style: 'caveman', optional: [] };
 }
 
 export { installMenu };

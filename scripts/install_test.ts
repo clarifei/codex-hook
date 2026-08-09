@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { ensureCodebaseMemory, ensureWigolo } from './lib/config.ts';
+import {
+  disableHeadroomBridge,
+  ensureCodebaseMemory,
+  ensureHeadroomBridge,
+  ensureWigolo,
+  headroomBridgeEnabled,
+} from './lib/config.ts';
+import { compressToolOutputs } from '../hooks/lib/headroom-bridge.ts';
 import { gitBlobHash, installBytes, sameBlobHash } from './lib/files.ts';
 import {
   discoverSkills,
@@ -59,6 +66,8 @@ Deno.test('manifest and CLI selection', () => {
   assert.deepEqual(parseArgs(['--with', 'tanstack-query']).optional, ['tanstack-query']);
   assert.deepEqual(parseArgs(['--uninstall', 'tanstack-query']).uninstall, ['tanstack-query']);
   assert.equal(parseArgs(['--refresh', '--yes']).refresh, true);
+  assert.equal(parseArgs(['--headroom', '--yes']).headroom, true);
+  assert.equal(parseArgs(['--no-headroom', '--yes']).headroom, false);
 });
 
 Deno.test('discovers new child skills without merging collections', () => {
@@ -200,7 +209,168 @@ Deno.test('managed files and MCP config are idempotent', () => {
     assert(!ensureCodebaseMemory(configPath));
     assert(ensureWigolo(configPath));
     assert(!ensureWigolo(configPath));
+
+    Deno.writeTextFileSync(
+      configPath,
+      `model_provider = "custom"
+
+[model_providers.custom]
+base_url = "https://pool.afterinput.com"
+`,
+    );
+    assert(ensureHeadroomBridge(configPath));
+    assert.equal(ensureHeadroomBridge(configPath), false);
+    assert(headroomBridgeEnabled(configPath));
+    assert.match(Deno.readTextFileSync(configPath), /base_url = "http:\/\/127\.0\.0\.1:8788"/);
+    assert.deepEqual(
+      JSON.parse(Deno.readTextFileSync(path.join(directory, '.codex-hook', 'headroom-bridge.json'))),
+      { upstream: 'https://pool.afterinput.com' },
+    );
+    assert(disableHeadroomBridge(configPath));
+    assert(!headroomBridgeEnabled(configPath));
+    assert.match(Deno.readTextFileSync(configPath), /base_url = "https:\/\/pool\.afterinput\.com"/);
+    assert(!disableHeadroomBridge(configPath));
+    Deno.writeTextFileSync(
+      configPath,
+      Deno.readTextFileSync(configPath).replace('https://pool.afterinput.com', 'ftp://pool.afterinput.com'),
+    );
+    assert(!ensureHeadroomBridge(configPath));
   } finally {
     Deno.removeSync(directory, { recursive: true });
+  }
+});
+
+Deno.test('compresses only Responses tool outputs and fails open', async () => {
+  const body = {
+    model: 'gpt-5.6-terra',
+    input: [
+      { type: 'reasoning', encrypted_content: 'keep' },
+      { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_1', output: 'very long tool output' },
+    ],
+  };
+  const result = await compressToolOutputs(body, {
+    headroomUrl: 'http://127.0.0.1:8787',
+    fetch: (_input, init) => {
+      assert.deepEqual(Object.fromEntries(new Headers(init?.headers)), {
+        'content-type': 'application/json',
+        'x-client': 'codex',
+      });
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        config: { mode: 'lossy_inline' },
+        model: 'gpt-5.6-terra',
+        messages: [{ role: 'tool', tool_call_id: 'call_1', content: 'very long tool output' }],
+      });
+      return Promise.resolve(
+        Response.json({ messages: [{ role: 'tool', content: 'short output' }], tokens_saved: 12 }),
+      );
+    },
+  });
+  assert(result.attempted);
+  assert(result.compressed);
+  assert.equal(result.tokensSaved, 12);
+  assert.equal((result.body.input as Array<Record<string, unknown>>)[2]?.output, 'short output');
+  assert.equal((result.body.input as Array<Record<string, unknown>>)[0]?.encrypted_content, 'keep');
+  assert.equal((body.input[2] as Record<string, unknown>).output, 'very long tool output');
+
+  const fallback = await compressToolOutputs(body, {
+    headroomUrl: 'http://127.0.0.1:8787',
+    fetch: () => Promise.resolve(new Response(null, { status: 503 })),
+  });
+  assert(fallback.attempted);
+  assert.equal(fallback.compressed, false);
+  assert.equal(fallback.body, body);
+});
+
+Deno.test('bridge sends OAuth only to Afterinput', async () => {
+  const headroomPort = 18877;
+  const bridgePort = 18878;
+  const upstreamPort = 18879;
+  let compressorAuth: string | null = null;
+  let compressorClient: string | null = null;
+  let upstreamAuth: string | null = null;
+  let upstreamBody: Record<string, unknown> | undefined;
+  const headroom = Deno.serve({ hostname: '127.0.0.1', port: headroomPort }, async (request) => {
+    if (new URL(request.url).pathname === '/health') return Response.json({ ok: true });
+    compressorAuth = request.headers.get('authorization');
+    compressorClient = request.headers.get('x-client');
+    const body = await request.json();
+    assert.deepEqual(body, {
+      config: { mode: 'lossy_inline' },
+      model: 'gpt-5.6-terra',
+      messages: [{ role: 'tool', tool_call_id: 'call_1', content: 'long output' }],
+    });
+    return Response.json({ messages: [{ role: 'tool', content: 'short' }], tokens_saved: 3 });
+  });
+  const upstream = Deno.serve({ hostname: '127.0.0.1', port: upstreamPort }, async (request) => {
+    upstreamAuth = request.headers.get('authorization');
+    upstreamBody = await request.json();
+    return Response.json({ ok: true });
+  });
+  const codexHome = Deno.makeTempDirSync({ prefix: 'codex-headroom-' });
+  Deno.mkdirSync(path.join(codexHome, '.codex-hook'));
+  Deno.writeTextFileSync(
+    path.join(codexHome, '.codex-hook', 'headroom-bridge.json'),
+    JSON.stringify({ upstream: `http://127.0.0.1:${upstreamPort}` }),
+  );
+  const bridge = new Deno.Command(Deno.execPath(), {
+    args: [
+      'run',
+      '--quiet',
+      '--allow-env',
+      '--allow-net',
+      '--allow-read',
+      '--allow-run',
+      path.join(Deno.cwd(), 'hooks', 'headroom-bridge.ts'),
+    ],
+    env: {
+      CODEX_HOME: codexHome,
+      HEADROOM_BRIDGE_PORT: String(bridgePort),
+      HEADROOM_URL: `http://127.0.0.1:${headroomPort}`,
+      HEADROOM_BRIDGE_START_HEADROOM: 'false',
+    },
+    stdin: 'null',
+    stdout: 'null',
+    stderr: 'null',
+  }).spawn();
+
+  try {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        if ((await fetch(`http://127.0.0.1:${bridgePort}/health`)).ok) break;
+      } catch {
+        // The child has not bound the port yet.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const response = await fetch(`http://127.0.0.1:${bridgePort}/responses`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer opaque-oauth-token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-5.6-terra',
+        input: [{ type: 'function_call_output', call_id: 'call_1', output: 'long output' }],
+      }),
+    });
+    assert(response.ok);
+    assert.equal(compressorAuth, null);
+    assert.equal(compressorClient, 'codex');
+    assert.equal(upstreamAuth, 'Bearer opaque-oauth-token');
+    assert.equal((upstreamBody?.input as Array<Record<string, unknown>>)[0]?.output, 'short');
+    assert.deepEqual(await (await fetch(`http://127.0.0.1:${bridgePort}/health`)).json(), {
+      ok: true,
+      headroom: true,
+      compressed: 1,
+      headroomCalls: 1,
+      requests: 1,
+      responses: 1,
+      skipped: 0,
+      tokensSaved: 3,
+    });
+  } finally {
+    bridge.kill('SIGTERM');
+    await bridge.status;
+    await headroom.shutdown();
+    await upstream.shutdown();
+    Deno.removeSync(codexHome, { recursive: true });
   }
 });
