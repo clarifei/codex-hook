@@ -36,7 +36,7 @@ Deno.test('manifest and CLI selection', () => {
   assert(all.some((skill) => skill.repository === 'denoland/skills' && skill.source === 'skills/deno'));
   assert(
     all.some((skill) =>
-      skill.repository === 'tanstack-skills/tanstack-skills' && skill.destination === 'tanstack/tanstack-query'
+      skill.repository === 'tanstack-skills/tanstack-skills' && skill.destination === 'tanstack/query'
     ),
   );
   const optionalSources = optionalSkills.flatMap(({ sources }) => sources);
@@ -91,8 +91,8 @@ Deno.test('infers nested collections and root skills', () => {
   assert.deepEqual(
     matt.map(({ id, sources }) => [id, sources[0].source, sources[0].destination]),
     [
-      ['matt-pocock-engineering', 'skills/engineering', 'matt-pocock/matt-pocock-engineering'],
-      ['matt-pocock-productivity', 'skills/productivity', 'matt-pocock/matt-pocock-productivity'],
+      ['matt-pocock-engineering', 'skills/engineering', 'matt-pocock/engineering'],
+      ['matt-pocock-productivity', 'skills/productivity', 'matt-pocock/productivity'],
     ],
   );
 
@@ -106,7 +106,7 @@ Deno.test('infers nested collections and root skills', () => {
     repository: 'yusukebe/hono-skill',
     ref: 'main',
     source: '',
-    destination: 'hono/hono',
+    destination: 'hono',
     exclude: ['README.md'],
   });
 
@@ -126,7 +126,7 @@ Deno.test('infers nested collections and root skills', () => {
 Deno.test('detects destination skills installed locally', () => {
   const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
   try {
-    installBytes(targetFor(directory, 'tanstack/tanstack-query/SKILL.md'), new TextEncoder().encode('skill'));
+    installBytes(targetFor(directory, 'tanstack/query/SKILL.md'), new TextEncoder().encode('skill'));
     assert.deepEqual(installedSelection(directory), ['tanstack-query']);
   } finally {
     Deno.removeSync(directory, { recursive: true });
@@ -136,12 +136,12 @@ Deno.test('detects destination skills installed locally', () => {
 Deno.test('uses the local cache and uninstalls owned files offline', async () => {
   const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
   try {
-    const relative = 'tanstack/tanstack-query/SKILL.md';
+    const relative = 'tanstack/query/SKILL.md';
     const target = targetFor(directory, relative);
     const bytes = new TextEncoder().encode('cached skill');
     installBytes(target, bytes);
     writeState(path.join(directory, '.codex-hook', 'skills.json'), {
-      version: 3,
+      version: 4,
       style: 'caveman',
       optional: ['tanstack-query'],
       files: { [relative]: gitBlobHash(bytes) },

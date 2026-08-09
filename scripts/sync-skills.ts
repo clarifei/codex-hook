@@ -26,13 +26,14 @@ type SyncFile = {
   skill: SkillSource;
   owner?: string;
   path: string;
+  ref: string;
   relative: string;
   sha: string;
 };
 type SyncOptions = { install?: boolean; refresh?: boolean };
 
 const downloadConcurrency = 12;
-const managedStateVersion = 3;
+const managedStateVersion = 4;
 
 async function syncSkills(
   codexHome: string,
@@ -73,9 +74,16 @@ async function syncSkills(
       if (skill.source && !entry.path.startsWith(`${skill.source}/`)) continue;
       const inner = skill.source ? entry.path.slice(skill.source.length + 1) : entry.path;
       if (excluded(skill, inner)) continue;
-      const relative = skill.destination ? `${skill.destination}/${inner}` : inner;
+      const relative = relativeFor(skill, inner);
       reserve(targets, relative);
-      files.push({ skill, owner: sourceOwners.get(skill), path: entry.path, relative, sha: entry.sha });
+      files.push({
+        skill,
+        owner: sourceOwners.get(skill),
+        path: entry.path,
+        ref: entry.ref || skill.ref,
+        relative,
+        sha: entry.sha,
+      });
     }
   }
 
@@ -93,7 +101,7 @@ async function syncSkills(
       return {
         ...file,
         action: 'replace' as const,
-        bytes: await bytes(file.skill.repository, file.skill.ref, file.path),
+        bytes: await bytes(file.skill.repository, file.ref, file.path),
         target,
       };
     });
@@ -181,6 +189,18 @@ function groupFilesByOwner(files: readonly SyncFile[]) {
   }, {});
 }
 
+function relativeFor(skill: SkillSource, inner: string) {
+  if (!skill.destination) return inner;
+  if (skill.source !== 'skills') return `${skill.destination}/${inner}`;
+  const [name, ...rest] = inner.split('/');
+  const local = name === skill.destination
+    ? ''
+    : name.startsWith(`${skill.destination}-`)
+    ? name.slice(skill.destination.length + 1)
+    : name;
+  return [skill.destination, local, ...rest].filter(Boolean).join('/');
+}
+
 async function mapConcurrent<T, Result>(
   items: readonly T[],
   limit: number,
@@ -215,7 +235,8 @@ function targetFor(codexHome: string, relative: string) {
 function readState(statePath: string): ManagedState {
   try {
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-    return state && (state.version === 1 || state.version === 2 || state.version === managedStateVersion) &&
+    return state &&
+        (state.version === 1 || state.version === 2 || state.version === 3 || state.version === managedStateVersion) &&
         state.files &&
         typeof state.files === 'object'
       ? state as ManagedState

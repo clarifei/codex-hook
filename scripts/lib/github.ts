@@ -2,6 +2,7 @@ type TreeEntry = {
   path: string;
   sha: string;
   type: string;
+  ref?: string;
 };
 
 type TreeResponse = {
@@ -65,10 +66,23 @@ async function githubTree(repository: string, ref: string): Promise<TreeEntry[]>
 }
 
 async function jsDelivrTree(repository: string, ref: string): Promise<TreeEntry[]> {
+  const resolvedRef = await gitRef(repository, ref).catch(() => ref);
   const result = await fetchJson<JsDelivrTreeResponse>(
-    `https://data.jsdelivr.com/v1/package/gh/${repository}@${ref}/flat`,
+    `https://data.jsdelivr.com/v1/package/gh/${repository}@${resolvedRef}/flat`,
   );
-  return result.files.map(({ name, hash }) => ({ path: name.slice(1), sha: hash, type: 'blob' }));
+  return result.files.map(({ name, hash }) => ({ path: name.slice(1), sha: hash, type: 'blob', ref: resolvedRef }));
+}
+
+async function gitRef(repository: string, ref: string): Promise<string> {
+  const response = await fetch(
+    `https://github.com/${repository}.git/info/refs?service=git-upload-pack`,
+    { headers: { 'user-agent': 'codex-hook' } },
+  );
+  if (!response.ok) throw new Error(`git ref request failed: ${response.status}`);
+  const branch = ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = (await response.text()).match(new RegExp(`([\\da-f]{40}) refs/heads/${branch}(?:\\0|\\n)`));
+  if (!match) throw new Error(`git ref not found: ${repository}@${ref}`);
+  return match[1];
 }
 
 export { bytes, tree };

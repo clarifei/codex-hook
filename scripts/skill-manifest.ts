@@ -57,13 +57,13 @@ const workstyles: readonly WorkstyleOption[] = [
     id: 'caveman',
     label: 'Caveman',
     description: 'Terse, direct responses',
-    source: { repository: 'JuliusBrussee/caveman', ref: 'main', source: 'skills' },
+    source: { repository: 'JuliusBrussee/caveman', ref: 'main', source: 'skills', destination: 'caveman' },
   },
   {
     id: 'beeline',
     label: 'Beeline',
     description: 'Structured, action-first responses',
-    source: { repository: 'iceHub82/beeline', ref: 'main', source: 'skills' },
+    source: { repository: 'iceHub82/beeline', ref: 'main', source: 'skills', destination: 'beeline' },
   },
 ];
 
@@ -72,10 +72,16 @@ const styleSkills = Object.fromEntries(
 ) as Record<Workstyle, SkillSource>;
 
 const coreComponents: readonly CoreComponent[] = [
-  { label: 'Ponytail', source: { repository: 'DietrichGebert/ponytail', ref: 'main', source: 'skills' } },
+  {
+    label: 'Ponytail',
+    source: { repository: 'DietrichGebert/ponytail', ref: 'main', source: 'skills', destination: 'ponytail' },
+  },
   { label: 'RTK' },
   { label: 'Codebase Memory MCP' },
-  { label: 'Wigolo', source: { repository: 'KnockOutEZ/wigolo', ref: 'main', source: 'skills' } },
+  {
+    label: 'Wigolo',
+    source: { repository: 'KnockOutEZ/wigolo', ref: 'main', source: 'skills', destination: 'wigolo' },
+  },
 ];
 
 const coreSkills = coreComponents.flatMap(({ source }) => source ? [source] : []);
@@ -140,7 +146,7 @@ const skillRepositories: readonly SkillRepository[] = [
 ];
 
 const catalogTtlMs = 60 * 60 * 1000;
-const catalogVersion = 4;
+const catalogVersion = 5;
 const emptyGroups = skillRepositories.map(({ id, label }) => ({
   id,
   label,
@@ -226,7 +232,15 @@ function skillId(groupId: string, source: string, directSkill: boolean) {
 }
 
 function skillDestination(groupId: string, skillId: string) {
-  return `${groupId}/${skillId}`;
+  const local = localSkillName(groupId, skillId);
+  return local ? `${groupId}/${local}` : groupId;
+}
+
+function localSkillName(groupId: string, skillId: string) {
+  if (skillId === groupId) return '';
+  if (skillId.startsWith(`${groupId}-`)) return skillId.slice(groupId.length + 1);
+  const family = groupId.split('-').at(-1)!;
+  return skillId.startsWith(`${family}-`) ? skillId.slice(family.length + 1) : skillId;
 }
 
 function slug(value: string) {
