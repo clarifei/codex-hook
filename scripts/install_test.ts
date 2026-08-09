@@ -8,7 +8,7 @@ import {
   ensureWigolo,
   headroomBridgeEnabled,
 } from './lib/config.ts';
-import { compressToolOutputs } from '../hooks/lib/headroom-bridge.ts';
+import { compressToolOutputs, projectFromHeaders } from '../hooks/lib/headroom-bridge.ts';
 import { gitBlobHash, installBytes, sameBlobHash } from './lib/files.ts';
 import {
   discoverSkills,
@@ -226,15 +226,40 @@ base_url = "https://pool.afterinput.com"
       JSON.parse(Deno.readTextFileSync(path.join(directory, '.codex-hook', 'headroom-bridge.json'))),
       { upstream: 'https://pool.afterinput.com' },
     );
+    assert.match(Deno.readTextFileSync(configPath), /"X-Headroom-Cwd" = "PWD"/);
     assert(disableHeadroomBridge(configPath));
     assert(!headroomBridgeEnabled(configPath));
     assert.match(Deno.readTextFileSync(configPath), /base_url = "https:\/\/pool\.afterinput\.com"/);
+    assert.doesNotMatch(Deno.readTextFileSync(configPath), /X-Headroom/);
     assert(!disableHeadroomBridge(configPath));
     Deno.writeTextFileSync(
       configPath,
       Deno.readTextFileSync(configPath).replace('https://pool.afterinput.com', 'ftp://pool.afterinput.com'),
     );
     assert(!ensureHeadroomBridge(configPath));
+  } finally {
+    Deno.removeSync(directory, { recursive: true });
+  }
+});
+
+Deno.test('Headroom setup preserves existing provider header mappings', () => {
+  const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
+  const configPath = path.join(directory, 'config.toml');
+  try {
+    Deno.writeTextFileSync(
+      configPath,
+      `model_provider = "custom"
+
+[model_providers.custom]
+base_url = "https://pool.afterinput.com"
+env_http_headers = { "X-Custom" = "CUSTOM_TOKEN" }
+`,
+    );
+    assert(ensureHeadroomBridge(configPath));
+    assert.equal(Deno.readTextFileSync(configPath).match(/^env_http_headers\s*=/gm)?.length, 1);
+    assert.match(Deno.readTextFileSync(configPath), /"X-Custom" = "CUSTOM_TOKEN"/);
+    assert(disableHeadroomBridge(configPath));
+    assert.match(Deno.readTextFileSync(configPath), /"X-Custom" = "CUSTOM_TOKEN"/);
   } finally {
     Deno.removeSync(directory, { recursive: true });
   }
@@ -247,11 +272,23 @@ Deno.test('compresses only Responses tool outputs and fails open', async () => {
       { type: 'reasoning', encrypted_content: 'keep' },
       { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
       { type: 'function_call_output', call_id: 'call_1', output: 'very long tool output' },
+      {
+        type: 'custom_tool_call_output',
+        call_id: 'call_2',
+        output: [{ type: 'input_text', text: 'first block' }, { type: 'text', text: 'second block' }],
+      },
+      {
+        type: 'custom_tool_call_output',
+        call_id: 'call_3',
+        output: [{ type: 'input_text', text: 'keep text' }, { type: 'input_image', image_url: 'keep-image' }],
+      },
     ],
   };
   const result = await compressToolOutputs(body, {
     headroomUrl: 'http://127.0.0.1:8787',
-    fetch: (_input, init) => {
+    project: 'codex-hook',
+    fetch: (input, init) => {
+      assert.equal(new URL(String(input)).pathname, '/p/codex-hook/v1/compress');
       assert.deepEqual(Object.fromEntries(new Headers(init?.headers)), {
         'content-type': 'application/json',
         'x-client': 'codex',
@@ -259,10 +296,16 @@ Deno.test('compresses only Responses tool outputs and fails open', async () => {
       assert.deepEqual(JSON.parse(String(init?.body)), {
         config: { mode: 'lossy_inline' },
         model: 'gpt-5.6-terra',
-        messages: [{ role: 'tool', tool_call_id: 'call_1', content: 'very long tool output' }],
+        messages: [
+          { role: 'tool', tool_call_id: 'call_1', content: 'very long tool output' },
+          { role: 'tool', tool_call_id: 'call_2', content: 'first block\nsecond block' },
+        ],
       });
       return Promise.resolve(
-        Response.json({ messages: [{ role: 'tool', content: 'short output' }], tokens_saved: 12 }),
+        Response.json({
+          messages: [{ role: 'tool', content: 'short output' }, { role: 'tool', content: 'short blocks' }],
+          tokens_saved: 12,
+        }),
       );
     },
   });
@@ -270,8 +313,16 @@ Deno.test('compresses only Responses tool outputs and fails open', async () => {
   assert(result.compressed);
   assert.equal(result.tokensSaved, 12);
   assert.equal((result.body.input as Array<Record<string, unknown>>)[2]?.output, 'short output');
+  assert.deepEqual((result.body.input as Array<Record<string, unknown>>)[3]?.output, [
+    { type: 'input_text', text: 'short blocks' },
+  ]);
+  assert.deepEqual((result.body.input as Array<Record<string, unknown>>)[4]?.output, body.input[4].output);
   assert.equal((result.body.input as Array<Record<string, unknown>>)[0]?.encrypted_content, 'keep');
   assert.equal((body.input[2] as Record<string, unknown>).output, 'very long tool output');
+  assert.deepEqual(body.input[3].output, [
+    { type: 'input_text', text: 'first block' },
+    { type: 'text', text: 'second block' },
+  ]);
 
   const fallback = await compressToolOutputs(body, {
     headroomUrl: 'http://127.0.0.1:8787',
@@ -282,28 +333,43 @@ Deno.test('compresses only Responses tool outputs and fails open', async () => {
   assert.equal(fallback.body, body);
 });
 
+Deno.test('derives Headroom project from explicit override or working directory', () => {
+  assert.equal(
+    projectFromHeaders(new Headers({ 'x-headroom-project': 'named%20project', 'x-headroom-cwd': '/tmp/ignored' })),
+    'named project',
+  );
+  assert.equal(projectFromHeaders(new Headers({ 'x-headroom-cwd': '/work/codex-hook/' })), 'codex-hook');
+  assert.equal(projectFromHeaders(new Headers({ 'x-headroom-cwd': String.raw`C:\work\codex-hook` })), 'codex-hook');
+});
+
 Deno.test('bridge sends OAuth only to Afterinput', async () => {
   const headroomPort = 18877;
   const bridgePort = 18878;
   const upstreamPort = 18879;
   let compressorAuth: string | null = null;
   let compressorClient: string | null = null;
+  let compressorPath: string | null = null;
   let upstreamAuth: string | null = null;
+  let upstreamCwd: string | null = null;
+  let upstreamProject: string | null = null;
   let upstreamBody: Record<string, unknown> | undefined;
   const headroom = Deno.serve({ hostname: '127.0.0.1', port: headroomPort }, async (request) => {
     if (new URL(request.url).pathname === '/health') return Response.json({ ok: true });
+    compressorPath = new URL(request.url).pathname;
     compressorAuth = request.headers.get('authorization');
     compressorClient = request.headers.get('x-client');
     const body = await request.json();
     assert.deepEqual(body, {
       config: { mode: 'lossy_inline' },
       model: 'gpt-5.6-terra',
-      messages: [{ role: 'tool', tool_call_id: 'call_1', content: 'long output' }],
+      messages: [{ role: 'tool', tool_call_id: 'call_1', content: 'long output\nsecond block' }],
     });
     return Response.json({ messages: [{ role: 'tool', content: 'short' }], tokens_saved: 3 });
   });
   const upstream = Deno.serve({ hostname: '127.0.0.1', port: upstreamPort }, async (request) => {
     upstreamAuth = request.headers.get('authorization');
+    upstreamCwd = request.headers.get('x-headroom-cwd');
+    upstreamProject = request.headers.get('x-headroom-project');
     upstreamBody = await request.json();
     return Response.json({ ok: true });
   });
@@ -345,17 +411,30 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
     }
     const response = await fetch(`http://127.0.0.1:${bridgePort}/responses`, {
       method: 'POST',
-      headers: { authorization: 'Bearer opaque-oauth-token', 'content-type': 'application/json' },
+      headers: {
+        authorization: 'Bearer opaque-oauth-token',
+        'content-type': 'application/json',
+        'x-headroom-cwd': Deno.cwd(),
+      },
       body: JSON.stringify({
         model: 'gpt-5.6-terra',
-        input: [{ type: 'function_call_output', call_id: 'call_1', output: 'long output' }],
+        input: [{
+          type: 'custom_tool_call_output',
+          call_id: 'call_1',
+          output: [{ type: 'input_text', text: 'long output' }, { type: 'input_text', text: 'second block' }],
+        }],
       }),
     });
     assert(response.ok);
     assert.equal(compressorAuth, null);
     assert.equal(compressorClient, 'codex');
+    assert.equal(compressorPath, '/p/codex-hook/v1/compress');
     assert.equal(upstreamAuth, 'Bearer opaque-oauth-token');
-    assert.equal((upstreamBody?.input as Array<Record<string, unknown>>)[0]?.output, 'short');
+    assert.equal(upstreamCwd, null);
+    assert.equal(upstreamProject, null);
+    assert.deepEqual((upstreamBody?.input as Array<Record<string, unknown>>)[0]?.output, [
+      { type: 'input_text', text: 'short' },
+    ]);
     assert.deepEqual(await (await fetch(`http://127.0.0.1:${bridgePort}/health`)).json(), {
       ok: true,
       headroom: true,

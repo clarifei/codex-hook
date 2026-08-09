@@ -48,6 +48,10 @@ expected flow when headroom is enabled:
    and `headroom proxy` at `127.0.0.1:8787` only when needed.
 3. the bridge compresses Responses tool output through Headroom, then forwards the request and OAuth to Afterinput.
 
+the bridge maps `HEADROOM_PROJECT` (or the launch directory from `PWD`) to Headroom's `/p/<project>` route, so the
+dashboard separates lifetime savings per project. code navigation stays owned by the existing `codebase-memory-mcp`; the
+shared Headroom proxy intentionally does not start another code graph, Serena, memory layer, or MCP server.
+
 normal workflow is still just starting codex. the bridge does not need a manual command, and `headroom wrap codex`
 should not be used for this Afterinput setup. failures and timeouts pass the original request through unchanged.
 `--no-headroom` restores direct Afterinput routing.
@@ -58,7 +62,9 @@ curl --fail --silent http://127.0.0.1:8788/health
 ```
 
 `headroom dashboard` opens the dashboard served by the running proxy. `deno task headroom` is the shortcut for enabling
-the bridge directly from this checkout without rerunning the full installer.
+the bridge directly from this checkout without rerunning the full installer. `headroom doctor` still reports Codex as
+unwrapped because its detector does not know about this custom Afterinput bridge; bridge health and dashboard savings
+are the relevant checks here.
 
 ## installer notes
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read --allow-run
 
-import { compressToolOutputs } from './lib/headroom-bridge.ts';
+import { compressToolOutputs, projectFromHeaders } from './lib/headroom-bridge.ts';
 
 type BridgeConfig = { upstream?: string };
 
@@ -34,7 +34,10 @@ if (import.meta.main) {
 
 async function ensureBridge() {
   if (!(await readConfig()).upstream) return;
-  if (await bridgeRunning()) return;
+  if (await bridgeRunning()) {
+    await startHeadroom();
+    return;
+  }
   const command = [
     Deno.execPath(),
     'run',
@@ -76,17 +79,17 @@ async function serve() {
     if (responses) {
       metrics.responses++;
       const raw = await request.text();
-      return forward(request, target, await compressedBody(raw));
+      return forward(request, target, await compressedBody(raw, projectFromHeaders(request.headers)));
     }
     return forward(request, target);
   });
 }
 
-async function compressedBody(raw: string) {
+async function compressedBody(raw: string, project?: string) {
   try {
     const parsed = JSON.parse(raw);
     if (!isRecord(parsed)) return raw;
-    const result = await compressToolOutputs(parsed, { headroomUrl });
+    const result = await compressToolOutputs(parsed, { headroomUrl, project });
     if (result.attempted) metrics.headroomCalls++;
     if (result.compressed) {
       metrics.compressed++;
@@ -105,6 +108,8 @@ function forward(request: Request, target: URL, body?: string) {
   headers.delete('host');
   headers.delete('content-length');
   headers.delete('connection');
+  headers.delete('x-headroom-project');
+  headers.delete('x-headroom-cwd');
   return fetch(target, {
     method: request.method,
     headers,
@@ -144,12 +149,13 @@ async function startHeadroom() {
   if (Deno.env.get('HEADROOM_BRIDGE_START_HEADROOM') === 'false' || await headroomRunning()) return;
   const port = new URL(headroomUrl).port || '8787';
   try {
-    new Deno.Command('headroom', {
+    const child = new Deno.Command('headroom', {
       args: ['proxy', '--port', port],
       stdin: 'null',
       stdout: 'null',
       stderr: 'null',
     }).spawn();
+    child.unref();
   } catch {
     // The bridge still forwards directly when Headroom is unavailable.
   }

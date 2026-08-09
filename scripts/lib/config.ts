@@ -2,9 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 type TextChange = { changed: boolean; text: string };
-type ProviderSection = { end: number; section: string; start: number };
+type ProviderSection = { end: number; name: string; section: string; start: number };
 
 const headroomBridgeUrl = 'http://127.0.0.1:8788';
+const headroomProjectHeaderMarker = '# codex-hook: Headroom project analytics';
+const headroomProjectHeader =
+  'env_http_headers = { "X-Headroom-Project" = "HEADROOM_PROJECT", "X-Headroom-Cwd" = "PWD" }';
 
 function disablePonytail(configPath: string) {
   const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
@@ -32,34 +35,49 @@ function ensureHeadroomBridge(configPath: string) {
   const provider = activeProviderSection(original);
   if (!provider) return false;
   const baseUrl = provider.section.match(/^base_url\s*=\s*"([^"]+)"\s*$/m);
-  if (!baseUrl || baseUrl[1] === headroomBridgeUrl) return false;
+  if (!baseUrl) return false;
 
+  const upstream = baseUrl[1] === headroomBridgeUrl ? readHeadroomUpstream(configPath) : baseUrl[1];
+  if (!upstream) return false;
   try {
-    const upstream = new URL(baseUrl[1]);
-    if (!['http:', 'https:'].includes(upstream.protocol) || upstream.hostname !== 'pool.afterinput.com') return false;
+    const url = new URL(upstream);
+    if (!['http:', 'https:'].includes(url.protocol) || url.hostname !== 'pool.afterinput.com') return false;
   } catch {
     return false;
   }
 
-  const statePath = path.join(path.dirname(configPath), '.codex-hook', 'headroom-bridge.json');
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, `${JSON.stringify({ upstream: baseUrl[1] }, null, 2)}\n`, 'utf8');
-  const updated = provider.section.replace(baseUrl[0], `base_url = "${headroomBridgeUrl}"`);
-  fs.writeFileSync(
-    configPath,
-    original.slice(0, provider.start) + updated + original.slice(provider.end),
-    'utf8',
-  );
-  return true;
+  let updated = provider.section;
+  if (baseUrl[1] !== headroomBridgeUrl) {
+    updated = updated.replace(baseUrl[0], `base_url = "${headroomBridgeUrl}"`);
+  }
+  updated = ensureHeadroomProjectHeader(updated, original, provider.name);
+
+  let changed = updated !== provider.section;
+  if (changed) {
+    fs.writeFileSync(
+      configPath,
+      original.slice(0, provider.start) + updated + original.slice(provider.end),
+      'utf8',
+    );
+  }
+
+  const statePath = headroomStatePath(configPath);
+  const stateText = `${JSON.stringify({ upstream }, null, 2)}\n`;
+  if (!fs.existsSync(statePath) || fs.readFileSync(statePath, 'utf8') !== stateText) {
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, stateText, 'utf8');
+    changed = true;
+  }
+  return changed;
 }
 
 function disableHeadroomBridge(configPath: string) {
-  const statePath = path.join(path.dirname(configPath), '.codex-hook', 'headroom-bridge.json');
+  const statePath = headroomStatePath(configPath);
+  const savedUpstream = readHeadroomUpstream(configPath);
+  if (!savedUpstream) return false;
   let upstream: string;
   try {
-    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-    if (typeof state.upstream !== 'string') return false;
-    const url = new URL(state.upstream);
+    const url = new URL(savedUpstream);
     if (!['http:', 'https:'].includes(url.protocol) || url.hostname !== 'pool.afterinput.com') return false;
     upstream = url.toString().replace(/\/$/, '');
   } catch {
@@ -69,16 +87,55 @@ function disableHeadroomBridge(configPath: string) {
   const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
   const provider = activeProviderSection(original);
   const baseUrl = provider?.section.match(/^base_url\s*=\s*"([^"]+)"\s*$/m);
-  if (provider && baseUrl?.[1] === headroomBridgeUrl) {
-    const updated = provider.section.replace(baseUrl[0], `base_url = ${JSON.stringify(upstream)}`);
-    fs.writeFileSync(
-      configPath,
-      original.slice(0, provider.start) + updated + original.slice(provider.end),
-      'utf8',
-    );
+  if (provider) {
+    let updated = provider.section;
+    if (baseUrl?.[1] === headroomBridgeUrl) {
+      updated = updated.replace(baseUrl[0], `base_url = ${JSON.stringify(upstream)}`);
+    }
+    updated = removeHeadroomProjectHeader(updated);
+    if (updated !== provider.section) {
+      fs.writeFileSync(
+        configPath,
+        original.slice(0, provider.start) + updated + original.slice(provider.end),
+        'utf8',
+      );
+    }
   }
   fs.rmSync(statePath, { force: true });
   return true;
+}
+
+function ensureHeadroomProjectHeader(section: string, config: string, provider: string) {
+  if (/^env_http_headers\s*=/m.test(section)) return section;
+  if (config.includes(`[model_providers.${provider}.env_http_headers]`)) return section;
+  const baseUrl = section.match(/^base_url\s*=.*$/m);
+  if (!baseUrl) return section;
+  const newline = section.includes('\r\n') ? '\r\n' : '\n';
+  return section.replace(
+    baseUrl[0],
+    `${baseUrl[0]}${newline}${headroomProjectHeaderMarker}${newline}${headroomProjectHeader}`,
+  );
+}
+
+function removeHeadroomProjectHeader(section: string) {
+  for (const newline of ['\r\n', '\n']) {
+    const block = `${headroomProjectHeaderMarker}${newline}${headroomProjectHeader}`;
+    section = section.replace(`${block}${newline}`, '').replace(block, '');
+  }
+  return section;
+}
+
+function headroomStatePath(configPath: string) {
+  return path.join(path.dirname(configPath), '.codex-hook', 'headroom-bridge.json');
+}
+
+function readHeadroomUpstream(configPath: string) {
+  try {
+    const value = JSON.parse(fs.readFileSync(headroomStatePath(configPath), 'utf8'));
+    return value && typeof value === 'object' && typeof value.upstream === 'string' ? value.upstream : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function headroomBridgeEnabled(configPath: string) {
@@ -87,7 +144,7 @@ function headroomBridgeEnabled(configPath: string) {
   if (section?.match(/^base_url\s*=\s*"([^"]+)"\s*$/m)?.[1] !== headroomBridgeUrl) return false;
   try {
     const state = JSON.parse(
-      fs.readFileSync(path.join(path.dirname(configPath), '.codex-hook', 'headroom-bridge.json'), 'utf8'),
+      fs.readFileSync(headroomStatePath(configPath), 'utf8'),
     );
     return typeof state.upstream === 'string';
   } catch {
@@ -96,15 +153,15 @@ function headroomBridgeEnabled(configPath: string) {
 }
 
 function activeProviderSection(text: string): ProviderSection | null {
-  const provider = text.match(/^model_provider\s*=\s*"([^"]+)"\s*$/m)?.[1];
-  if (!provider) return null;
-  const header = `[model_providers.${provider}]`;
+  const name = text.match(/^model_provider\s*=\s*"([^"]+)"\s*$/m)?.[1];
+  if (!name) return null;
+  const header = `[model_providers.${name}]`;
   const start = text.indexOf(header);
   if (start < 0) return null;
   const afterHeader = start + header.length;
   const boundary = text.slice(afterHeader).match(/\r?\n\[/);
   const end = boundary ? afterHeader + (boundary.index ?? 0) : text.length;
-  return { end, section: text.slice(start, end), start };
+  return { end, name, section: text.slice(start, end), start };
 }
 
 function ensureMcpServer(
