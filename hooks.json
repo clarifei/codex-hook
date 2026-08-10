@@ -7,8 +7,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "deno run --quiet --allow-env --allow-net --allow-read --allow-run \"${CODEX_HOME:-$HOME/.codex}/hooks/headroom-bridge.ts\" ensure",
-            "commandWindows": "deno run --quiet --allow-env --allow-net --allow-read --allow-run (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\headroom-bridge.ts') ensure",
+            "command": "deno run --quiet --allow-env --allow-sys --allow-net --allow-read --allow-run \"${CODEX_HOME:-$HOME/.codex}/hooks/headroom-bridge.ts\" ensure",
+            "commandWindows": "deno run --quiet --allow-env --allow-sys --allow-net --allow-read --allow-run (Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }) 'hooks\\headroom-bridge.ts') ensure",
             "timeout": 5,
             "statusMessage": "starting headroom bridge"
           }

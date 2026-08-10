@@ -339,10 +339,11 @@ Deno.test({
     const bridgePort = (listener.addr as Deno.NetAddr).port;
     listener.close();
     const directory = Deno.makeTempDirSync({ prefix: 'codex-headroom-windows-' });
+    const codexHome = path.join(directory, '.codex');
     let bridgePid = 0;
-    Deno.mkdirSync(path.join(directory, '.codex-hook'));
+    Deno.mkdirSync(path.join(codexHome, '.codex-hook'), { recursive: true });
     Deno.writeTextFileSync(
-      path.join(directory, '.codex-hook', 'headroom-bridge.json'),
+      path.join(codexHome, '.codex-hook', 'headroom-bridge.json'),
       JSON.stringify({ upstream: 'https://pool.afterinput.com' }),
     );
     try {
@@ -352,6 +353,7 @@ Deno.test({
           'run',
           '--quiet',
           '--allow-env',
+          '--allow-sys',
           '--allow-net',
           '--allow-read',
           '--allow-run',
@@ -359,9 +361,11 @@ Deno.test({
           'ensure',
         ],
         env: {
-          CODEX_HOME: directory,
+          CODEX_HOME: '',
           HEADROOM_BRIDGE_PORT: String(bridgePort),
           HEADROOM_BRIDGE_START_HEADROOM: 'false',
+          HOME: directory,
+          USERPROFILE: directory,
         },
         stdin: 'null',
         stdout: 'piped',

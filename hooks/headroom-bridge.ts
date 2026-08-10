@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-env --allow-net --allow-read --allow-run
+#!/usr/bin/env -S deno run --allow-env --allow-sys --allow-net --allow-read --allow-run
 
 import os from 'node:os';
 import path from 'node:path';
@@ -45,7 +45,7 @@ async function ensureBridge() {
   if (Deno.build.os === 'windows') {
     await launchWindows(
       Deno.execPath(),
-      `run --quiet --allow-env --allow-net --allow-read --allow-run "${scriptPath()}" serve`,
+      `run --quiet --allow-env --allow-sys --allow-net --allow-read --allow-run "${scriptPath()}" serve`,
     );
   } else {
     const command = [
@@ -53,6 +53,7 @@ async function ensureBridge() {
       'run',
       '--quiet',
       '--allow-env',
+      '--allow-sys',
       '--allow-net',
       '--allow-read',
       '--allow-run',
