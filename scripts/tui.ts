@@ -401,7 +401,7 @@ if (import.meta.main) {
   const manifest = argument('--manifest');
   if (manifest) setOptionalSkillGroups(JSON.parse(await readFile(manifest, 'utf8')));
   else await refreshOptionalSkillGroups();
-  const selection = await chooseInstall(readDefaults());
+  const selection = await chooseInstall(await readDefaults());
   const output = argument('--output');
   if (output) await writeFile(output, JSON.stringify(selection), 'utf8');
   else console.log(JSON.stringify(selection));
@@ -412,9 +412,11 @@ function argument(name: string) {
   return index < 0 ? undefined : runtimeArgs[index + 1];
 }
 
-function readDefaults(): InstallSelection {
-  const value = argument('--defaults');
-  return value ? JSON.parse(value) : { headroom: false, style: 'caveman', optional: [] };
+async function readDefaults(): Promise<InstallSelection> {
+  const defaultsFile = argument('--defaults-file');
+  return defaultsFile
+    ? JSON.parse(await readFile(defaultsFile, 'utf8'))
+    : { headroom: false, style: 'caveman', optional: [] };
 }
 
 export { installMenu };

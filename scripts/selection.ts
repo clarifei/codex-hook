@@ -63,8 +63,13 @@ async function chooseWithTui(
     prefix: 'codex-hook-manifest-',
     suffix: '.json',
   });
+  const defaultsFile = await Deno.makeTempFile({
+    prefix: 'codex-hook-defaults-',
+    suffix: '.json',
+  });
   try {
     await Deno.writeTextFile(manifest, JSON.stringify(optionalSkillGroups));
+    await Deno.writeTextFile(defaultsFile, JSON.stringify(defaults));
     let status: { success: boolean; code: number };
     try {
       status = await new Deno.Command('bun', {
@@ -73,8 +78,8 @@ async function chooseWithTui(
           path.join(source, 'scripts', 'tui.ts'),
           '--output',
           output,
-          '--defaults',
-          JSON.stringify(defaults),
+          '--defaults-file',
+          defaultsFile,
           '--manifest',
           manifest,
         ],
@@ -94,6 +99,7 @@ async function chooseWithTui(
   } finally {
     await Deno.remove(output).catch(() => {});
     await Deno.remove(manifest).catch(() => {});
+    await Deno.remove(defaultsFile).catch(() => {});
   }
 }
 
