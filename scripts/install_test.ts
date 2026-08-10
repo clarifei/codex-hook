@@ -17,7 +17,7 @@ import {
   setOptionalSkillGroups,
   skillsFor,
 } from './skill-manifest.ts';
-import { installedSelection, parseArgs } from './selection.ts';
+import { bunCommand, installedSelection, parseArgs } from './selection.ts';
 import { pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState } from './sync-skills.ts';
 import { testOptionalSkillGroups } from './test-manifest.ts';
 
@@ -68,6 +68,17 @@ Deno.test('manifest and CLI selection', () => {
   assert.equal(parseArgs(['--refresh', '--yes']).refresh, true);
   assert.equal(parseArgs(['--headroom', '--yes']).headroom, true);
   assert.equal(parseArgs(['--no-headroom', '--yes']).headroom, false);
+});
+
+Deno.test('resolves Bun from a Windows PATH entry', () => {
+  const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
+  const executable = path.join(directory, 'bun.exe');
+  try {
+    Deno.writeFileSync(executable, new Uint8Array());
+    assert.equal(bunCommand('windows', `C:\\missing;\"${directory}\"`, '', ''), executable);
+  } finally {
+    Deno.removeSync(directory, { recursive: true });
+  }
 });
 
 Deno.test('discovers new child skills without merging collections', () => {
