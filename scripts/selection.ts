@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveExecutable } from '../hooks/lib/executable.ts';
 import { installedStyle } from '../hooks/lib/style.ts';
 import { headroomBridgeEnabled } from './lib/config.ts';
 import {
@@ -72,7 +73,7 @@ async function chooseWithTui(
     await Deno.writeTextFile(defaultsFile, JSON.stringify(defaults));
     let status: { success: boolean; code: number };
     try {
-      status = await new Deno.Command(bunCommand(), {
+      status = await new Deno.Command(resolveExecutable('bun'), {
         args: [
           'run',
           path.join(source, 'scripts', 'tui.ts'),
@@ -101,25 +102,6 @@ async function chooseWithTui(
     await Deno.remove(manifest).catch(() => {});
     await Deno.remove(defaultsFile).catch(() => {});
   }
-}
-
-function bunCommand(
-  platform = Deno.build.os,
-  pathValue = Deno.env.get('PATH') ?? '',
-  bunInstall = Deno.env.get('BUN_INSTALL'),
-  userProfile = Deno.env.get('USERPROFILE'),
-): string {
-  if (platform !== 'windows') return 'bun';
-
-  const directories = [
-    bunInstall && path.join(bunInstall, 'bin'),
-    userProfile && path.join(userProfile, '.bun', 'bin'),
-    ...pathValue.split(';'),
-  ].filter((directory): directory is string => Boolean(directory));
-  const executable = directories
-    .map((directory) => path.join(directory.trim().replace(/(^\"|\"$)/g, ''), 'bun.exe'))
-    .find((candidate) => fs.existsSync(candidate));
-  return executable || 'bun.exe';
 }
 
 function savedSelection(codexHome: string, state: ManagedState): InstallSelection {
@@ -237,5 +219,5 @@ function parseOptional(value: string, known: Set<string>) {
   return normalizeOptional(selected);
 }
 
-export { bunCommand, chooseSelection, installedSelection, parseArgs };
+export { chooseSelection, installedSelection, parseArgs };
 export type { InstallArgs };

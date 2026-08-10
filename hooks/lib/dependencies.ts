@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveExecutable } from './executable.ts';
 import { installedStyle } from './style.ts';
 
 const codexHome = path.resolve(
@@ -59,7 +60,7 @@ function wigoloMcpConfigured(text?: string) {
 
 function rtkInstalled() {
   try {
-    return new Deno.Command(Deno.build.os === 'windows' ? 'rtk.exe' : 'rtk', {
+    return new Deno.Command(resolveExecutable('rtk'), {
       args: ['--version'],
       stdin: 'null',
       stdout: 'null',

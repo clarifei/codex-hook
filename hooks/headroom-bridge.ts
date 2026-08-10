@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read --allow-run
 
 import { compressToolOutputs, projectFromHeaders } from './lib/headroom-bridge.ts';
+import { resolveExecutable } from './lib/executable.ts';
 
 type BridgeConfig = { upstream?: string };
 
@@ -49,7 +50,7 @@ async function ensureBridge() {
     scriptPath(),
     'serve',
   ].map(shellQuote).join(' ');
-  await new Deno.Command('sh', {
+  await new Deno.Command(resolveExecutable('sh'), {
     args: ['-c', `setsid ${command} </dev/null >/dev/null 2>&1 &`],
     stdin: 'null',
     stdout: 'null',
@@ -149,7 +150,7 @@ async function startHeadroom() {
   if (Deno.env.get('HEADROOM_BRIDGE_START_HEADROOM') === 'false' || await headroomRunning()) return;
   const port = new URL(headroomUrl).port || '8787';
   try {
-    const child = new Deno.Command('headroom', {
+    const child = new Deno.Command(resolveExecutable('headroom'), {
       args: ['proxy', '--port', port],
       stdin: 'null',
       stdout: 'null',

@@ -1,15 +1,14 @@
 import { spawnSync } from 'node:child_process';
+import { resolveExecutable } from '../../hooks/lib/executable.ts';
 
-const binary = Deno.build.os === 'windows' ? 'rtk.exe' : 'rtk';
-const cargo = Deno.build.os === 'windows' ? 'cargo.exe' : 'cargo';
 const installerUrl = 'https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh';
 
 function exists(command: string) {
-  return spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0;
+  return spawnSync(resolveExecutable(command), ['--version'], { stdio: 'ignore' }).status === 0;
 }
 
 function ensureRtk(): 'install rtk' | 'skip rtk' {
-  if (exists(binary)) return 'skip rtk';
+  if (exists('rtk')) return 'skip rtk';
 
   if (Deno.build.os !== 'windows') {
     if (!exists('curl')) {
@@ -25,23 +24,23 @@ function ensureRtk(): 'install rtk' | 'skip rtk' {
       input: download.stdout,
       stdio: ['pipe', 'inherit', 'inherit'],
     });
-    if (result.status !== 0 || !exists(binary)) {
+    if (result.status !== 0 || !exists('rtk')) {
       throw new Error('rtk install failed');
     }
     return 'install rtk';
   }
 
-  if (!exists(cargo)) {
+  if (!exists('cargo')) {
     throw new Error(
       'rtk needs cargo to install from https://github.com/rtk-ai/rtk',
     );
   }
-  const result = spawnSync(cargo, [
+  const result = spawnSync(resolveExecutable('cargo'), [
     'install',
     '--git',
     'https://github.com/rtk-ai/rtk',
   ], { stdio: 'inherit' });
-  if (result.status !== 0 || !exists(binary)) {
+  if (result.status !== 0 || !exists('rtk')) {
     throw new Error('rtk install failed');
   }
   return 'install rtk';

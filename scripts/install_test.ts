@@ -9,6 +9,7 @@ import {
   headroomBridgeEnabled,
 } from './lib/config.ts';
 import { compressToolOutputs, projectFromHeaders } from '../hooks/lib/headroom-bridge.ts';
+import { resolveExecutable } from '../hooks/lib/executable.ts';
 import { gitBlobHash, installBytes, sameBlobHash } from './lib/files.ts';
 import {
   discoverSkills,
@@ -17,7 +18,7 @@ import {
   setOptionalSkillGroups,
   skillsFor,
 } from './skill-manifest.ts';
-import { bunCommand, installedSelection, parseArgs } from './selection.ts';
+import { installedSelection, parseArgs } from './selection.ts';
 import { pruneManaged, readState, reserve, syncSkills, targetFor, uninstallSkills, writeState } from './sync-skills.ts';
 import { testOptionalSkillGroups } from './test-manifest.ts';
 
@@ -70,15 +71,28 @@ Deno.test('manifest and CLI selection', () => {
   assert.equal(parseArgs(['--no-headroom', '--yes']).headroom, false);
 });
 
-Deno.test('resolves Bun from a Windows PATH entry', () => {
+Deno.test('resolves Windows executables after a malformed quoted PATH entry', () => {
   const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
-  const executable = path.join(directory, 'bun.exe');
+  const executable = path.join(directory, 'cargo.exe');
   try {
     Deno.writeFileSync(executable, new Uint8Array());
-    assert.equal(bunCommand('windows', `C:\\missing;\"${directory}\"`, '', ''), executable);
+    assert.equal(
+      resolveExecutable('cargo', {
+        env: {
+          Path: `C:\\broken\";\"${directory}\"`,
+          PATHEXT: '.exe;.cmd',
+        },
+        os: 'windows',
+      }),
+      executable,
+    );
   } finally {
     Deno.removeSync(directory, { recursive: true });
   }
+});
+
+Deno.test('leaves command lookup unchanged outside Windows', () => {
+  assert.equal(resolveExecutable('cargo', { env: {}, os: 'linux' }), 'cargo');
 });
 
 Deno.test('discovers new child skills without merging collections', () => {
