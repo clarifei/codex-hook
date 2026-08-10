@@ -567,7 +567,7 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
       headers: {
         authorization: 'Bearer opaque-oauth-token',
         'content-type': 'application/json',
-        'x-headroom-thread': 'thread-1',
+        'thread-id': 'thread-1',
       },
       body: JSON.stringify({
         model: 'gpt-5.6-terra',

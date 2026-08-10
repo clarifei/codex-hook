@@ -158,7 +158,9 @@ async function registerSession(request: Request) {
 function projectForRequest(headers: Headers) {
   const project = projectFromHeaders(headers);
   if (project) return project;
-  const threadId = cleanThreadId(headers.get('x-headroom-thread'));
+  const threadId = cleanThreadId(
+    headers.get('x-headroom-thread') || headers.get('thread-id') || headers.get('session-id'),
+  );
   return threadId ? projectsByThread.get(threadId) : undefined;
 }
 
