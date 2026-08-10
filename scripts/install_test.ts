@@ -253,6 +253,7 @@ base_url = "https://pool.afterinput.com"
       { upstream: 'https://pool.afterinput.com' },
     );
     assert.match(Deno.readTextFileSync(configPath), /"X-Headroom-Cwd" = "PWD"/);
+    assert.match(Deno.readTextFileSync(configPath), /"X-Headroom-Thread" = "CODEX_THREAD_ID"/);
     assert(disableHeadroomBridge(configPath));
     assert(!headroomBridgeEnabled(configPath));
     assert.match(Deno.readTextFileSync(configPath), /base_url = "https:\/\/pool\.afterinput\.com"/);
@@ -331,6 +332,27 @@ env_http_headers = { "X-Custom" = "CUSTOM_TOKEN" }
   }
 });
 
+Deno.test('Headroom setup upgrades its managed project header', () => {
+  const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
+  const configPath = path.join(directory, 'config.toml');
+  try {
+    Deno.writeTextFileSync(
+      configPath,
+      `model_provider = "custom"
+
+[model_providers.custom]
+base_url = "https://pool.afterinput.com"
+# codex-hook: Headroom project analytics
+env_http_headers = { "X-Headroom-Project" = "HEADROOM_PROJECT", "X-Headroom-Cwd" = "PWD" }
+`,
+    );
+    assert(ensureHeadroomBridge(configPath));
+    assert.match(Deno.readTextFileSync(configPath), /"X-Headroom-Thread" = "CODEX_THREAD_ID"/);
+  } finally {
+    Deno.removeSync(directory, { recursive: true });
+  }
+});
+
 Deno.test({
   name: 'Headroom ensure launches a detached bridge on Windows',
   ignore: Deno.build.os !== 'windows',
@@ -362,6 +384,7 @@ Deno.test({
         ],
         env: {
           CODEX_HOME: '',
+          CODEX_THREAD_ID: 'thread-1',
           HEADROOM_BRIDGE_PORT: String(bridgePort),
           HEADROOM_BRIDGE_START_HEADROOM: 'false',
           HOME: directory,
@@ -375,8 +398,10 @@ Deno.test({
       assert(result.success, new TextDecoder().decode(result.stderr));
       const response = await fetch(`http://127.0.0.1:${bridgePort}/health`);
       assert(response.ok);
-      bridgePid = Number((await response.json()).pid);
+      const health = await response.json();
+      bridgePid = Number(health.pid);
       assert(bridgePid > 0);
+      assert.deepEqual(health.projects, [path.basename(Deno.cwd())]);
       assert(startupMs < 5_000, `Headroom ensure took ${Math.round(startupMs)}ms`);
     } finally {
       if (bridgePid) Deno.kill(bridgePid, 'SIGTERM');
@@ -472,6 +497,7 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
   let upstreamAuth: string | null = null;
   let upstreamCwd: string | null = null;
   let upstreamProject: string | null = null;
+  let upstreamThread: string | null = null;
   let upstreamBody: Record<string, unknown> | undefined;
   const headroom = Deno.serve({ hostname: '127.0.0.1', port: headroomPort }, async (request) => {
     if (new URL(request.url).pathname === '/health') return Response.json({ ok: true });
@@ -490,6 +516,7 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
     upstreamAuth = request.headers.get('authorization');
     upstreamCwd = request.headers.get('x-headroom-cwd');
     upstreamProject = request.headers.get('x-headroom-project');
+    upstreamThread = request.headers.get('x-headroom-thread');
     upstreamBody = await request.json();
     return Response.json({ ok: true });
   });
@@ -529,12 +556,18 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
+    const registration = await fetch(`http://127.0.0.1:${bridgePort}/session`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ project: 'codex-hook', threadId: 'thread-1' }),
+    });
+    assert(registration.ok);
     const response = await fetch(`http://127.0.0.1:${bridgePort}/responses`, {
       method: 'POST',
       headers: {
         authorization: 'Bearer opaque-oauth-token',
         'content-type': 'application/json',
-        'x-headroom-cwd': Deno.cwd(),
+        'x-headroom-thread': 'thread-1',
       },
       body: JSON.stringify({
         model: 'gpt-5.6-terra',
@@ -552,6 +585,7 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
     assert.equal(upstreamAuth, 'Bearer opaque-oauth-token');
     assert.equal(upstreamCwd, null);
     assert.equal(upstreamProject, null);
+    assert.equal(upstreamThread, null);
     assert.deepEqual((upstreamBody?.input as Array<Record<string, unknown>>)[0]?.output, [
       { type: 'input_text', text: 'short' },
     ]);
@@ -559,6 +593,8 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
       ok: true,
       pid: bridge.pid,
       headroom: true,
+      projects: ['codex-hook'],
+      lastProject: 'codex-hook',
       compressed: 1,
       headroomCalls: 1,
       requests: 1,

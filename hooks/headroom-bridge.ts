@@ -11,6 +11,7 @@ type BridgeConfig = { upstream?: string };
 type Metrics = {
   compressed: number;
   headroomCalls: number;
+  lastProject?: string;
   requests: number;
   responses: number;
   skipped: number;
@@ -27,6 +28,7 @@ const metrics: Metrics = {
   skipped: 0,
   tokensSaved: 0,
 };
+const projectsByThread = new Map<string, string>();
 
 if (import.meta.main) {
   if (Deno.args[0] === 'ensure') {
@@ -40,6 +42,7 @@ async function ensureBridge() {
   if (!(await readConfig()).upstream) return;
   if (await bridgeRunning()) {
     await startHeadroom();
+    await registerProject();
     return;
   }
   if (Deno.build.os === 'windows') {
@@ -69,7 +72,10 @@ async function ensureBridge() {
   }
 
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (await bridgeRunning()) return;
+    if (await bridgeRunning()) {
+      await registerProject();
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
@@ -82,9 +88,16 @@ async function serve() {
 
   Deno.serve({ hostname: '127.0.0.1', port: bridgePort }, async (request) => {
     const pathname = new URL(request.url).pathname;
+    if (pathname === '/session' && request.method === 'PUT') return registerSession(request);
     if (pathname === '/ready') return Response.json({ ok: true });
     if (pathname === '/health') {
-      return Response.json({ ok: true, pid: Deno.pid, headroom: await headroomRunning(), ...metrics });
+      return Response.json({
+        ok: true,
+        pid: Deno.pid,
+        headroom: await headroomRunning(),
+        projects: [...new Set(projectsByThread.values())],
+        ...metrics,
+      });
     }
 
     metrics.requests++;
@@ -93,10 +106,65 @@ async function serve() {
     if (responses) {
       metrics.responses++;
       const raw = await request.text();
-      return forward(request, target, await compressedBody(raw, projectFromHeaders(request.headers)));
+      const project = projectForRequest(request.headers);
+      if (project) metrics.lastProject = project;
+      return forward(request, target, await compressedBody(raw, project));
     }
     return forward(request, target);
   });
+}
+
+async function registerProject() {
+  if (Deno.build.os !== 'windows') return;
+  const threadId = cleanThreadId(Deno.env.get('CODEX_THREAD_ID'));
+  const project = projectFromHeaders(
+    new Headers({
+      'x-headroom-cwd': Deno.cwd(),
+      'x-headroom-project': Deno.env.get('HEADROOM_PROJECT') || '',
+    }),
+  );
+  if (!threadId || !project) return;
+  try {
+    await fetch(`http://127.0.0.1:${bridgePort}/session`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ project, threadId }),
+      signal: AbortSignal.timeout(500),
+    });
+  } catch {
+    // Project analytics must not block session startup.
+  }
+}
+
+async function registerSession(request: Request) {
+  let value: unknown;
+  try {
+    value = await request.json();
+  } catch {
+    return new Response(null, { status: 400 });
+  }
+  if (!isRecord(value)) return new Response(null, { status: 400 });
+  const threadId = cleanThreadId(typeof value.threadId === 'string' ? value.threadId : null);
+  const project = projectFromHeaders(
+    new Headers({
+      'x-headroom-project': typeof value.project === 'string' ? value.project : '',
+    }),
+  );
+  if (!threadId || !project) return new Response(null, { status: 400 });
+  projectsByThread.set(threadId, project);
+  return Response.json({ ok: true, project });
+}
+
+function projectForRequest(headers: Headers) {
+  const project = projectFromHeaders(headers);
+  if (project) return project;
+  const threadId = cleanThreadId(headers.get('x-headroom-thread'));
+  return threadId ? projectsByThread.get(threadId) : undefined;
+}
+
+function cleanThreadId(value: string | null | undefined) {
+  const cleaned = value?.trim();
+  return cleaned ? cleaned.slice(0, 128) : undefined;
 }
 
 async function compressedBody(raw: string, project?: string) {
@@ -124,6 +192,7 @@ function forward(request: Request, target: URL, body?: string) {
   headers.delete('connection');
   headers.delete('x-headroom-project');
   headers.delete('x-headroom-cwd');
+  headers.delete('x-headroom-thread');
   return fetch(target, {
     method: request.method,
     headers,

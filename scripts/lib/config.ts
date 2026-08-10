@@ -6,8 +6,10 @@ type ProviderSection = { end: number; name: string; section: string; start: numb
 
 const headroomBridgeUrl = 'http://127.0.0.1:8788';
 const headroomProjectHeaderMarker = '# codex-hook: Headroom project analytics';
-const headroomProjectHeader =
+const legacyHeadroomProjectHeader =
   'env_http_headers = { "X-Headroom-Project" = "HEADROOM_PROJECT", "X-Headroom-Cwd" = "PWD" }';
+const headroomProjectHeader =
+  'env_http_headers = { "X-Headroom-Project" = "HEADROOM_PROJECT", "X-Headroom-Cwd" = "PWD", "X-Headroom-Thread" = "CODEX_THREAD_ID" }';
 const windowsMcpStartupTimeoutSec = 120;
 
 function disablePonytail(configPath: string) {
@@ -107,6 +109,9 @@ function disableHeadroomBridge(configPath: string) {
 }
 
 function ensureHeadroomProjectHeader(section: string, config: string, provider: string) {
+  if (section.includes(headroomProjectHeaderMarker) && section.includes(legacyHeadroomProjectHeader)) {
+    return section.replace(legacyHeadroomProjectHeader, headroomProjectHeader);
+  }
   if (/^env_http_headers\s*=/m.test(section)) return section;
   if (config.includes(`[model_providers.${provider}.env_http_headers]`)) return section;
   const baseUrl = section.match(/^base_url\s*=.*$/m);
@@ -119,9 +124,11 @@ function ensureHeadroomProjectHeader(section: string, config: string, provider: 
 }
 
 function removeHeadroomProjectHeader(section: string) {
-  for (const newline of ['\r\n', '\n']) {
-    const block = `${headroomProjectHeaderMarker}${newline}${headroomProjectHeader}`;
-    section = section.replace(`${block}${newline}`, '').replace(block, '');
+  for (const header of [headroomProjectHeader, legacyHeadroomProjectHeader]) {
+    for (const newline of ['\r\n', '\n']) {
+      const block = `${headroomProjectHeaderMarker}${newline}${header}`;
+      section = section.replace(`${block}${newline}`, '').replace(block, '');
+    }
   }
   return section;
 }
