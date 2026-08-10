@@ -8,6 +8,7 @@ const headroomBridgeUrl = 'http://127.0.0.1:8788';
 const headroomProjectHeaderMarker = '# codex-hook: Headroom project analytics';
 const headroomProjectHeader =
   'env_http_headers = { "X-Headroom-Project" = "HEADROOM_PROJECT", "X-Headroom-Cwd" = "PWD" }';
+const windowsMcpStartupTimeoutSec = 120;
 
 function disablePonytail(configPath: string) {
   const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
@@ -170,12 +171,15 @@ function ensureMcpServer(
   commandValue: string,
   argsValue: readonly string[],
   preserveExisting = false,
+  platform = Deno.build.os,
 ) {
   const original = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
   const newline = original.includes('\r\n') ? '\r\n' : '\n';
   const header = `[mcp_servers.${name}]`;
   const desiredCommand = `command = ${JSON.stringify(commandValue)}`;
   const desiredArgs = `args = [${argsValue.map((value) => JSON.stringify(value)).join(', ')}]`;
+  const startupTimeoutSec = platform === 'windows' ? windowsMcpStartupTimeoutSec : undefined;
+  const desiredTimeout = startupTimeoutSec === undefined ? undefined : `startup_timeout_sec = ${startupTimeoutSec}`;
   const start = original.indexOf(header);
   if (start < 0) {
     const separator = !original
@@ -185,7 +189,9 @@ function ensureMcpServer(
       : original.endsWith(newline)
       ? newline
       : `${newline}${newline}`;
-    const text = `${original}${separator}${header}${newline}${desiredCommand}${newline}${desiredArgs}${newline}`;
+    const timeout = desiredTimeout ? `${desiredTimeout}${newline}` : '';
+    const text =
+      `${original}${separator}${header}${newline}${desiredCommand}${newline}${desiredArgs}${newline}${timeout}`;
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, text, 'utf8');
     return true;
@@ -197,17 +203,29 @@ function ensureMcpServer(
   const section = original.slice(start, end);
   const command = section.match(/^command\s*=\s*.+$/m);
   const args = section.match(/^args\s*=\s*.+$/m);
-  if (preserveExisting && command) return false;
+  const timeout = section.match(/^startup_timeout_sec\s*=\s*(.+)$/m);
+  const timeoutSec = Number(timeout?.[1].trim());
+  const timeoutReady = startupTimeoutSec === undefined ||
+    (Number.isFinite(timeoutSec) && timeoutSec >= startupTimeoutSec);
+  if (preserveExisting && command && timeoutReady) return false;
   if (
     command && args && command[0].trim() === desiredCommand &&
-    args[0].trim() === desiredArgs
+    args[0].trim() === desiredArgs && timeoutReady
   ) return false;
-  let updated = command
-    ? section.replace(/^command\s*=\s*.+$/m, desiredCommand)
-    : `${section}${section.endsWith(newline) ? '' : newline}${desiredCommand}`;
-  updated = args
-    ? updated.replace(/^args\s*=\s*.+$/m, desiredArgs)
-    : `${updated}${updated.endsWith(newline) ? '' : newline}${desiredArgs}`;
+  let updated = section;
+  if (!(preserveExisting && command)) {
+    updated = command
+      ? updated.replace(/^command\s*=\s*.+$/m, desiredCommand)
+      : `${updated}${updated.endsWith(newline) ? '' : newline}${desiredCommand}`;
+    updated = args
+      ? updated.replace(/^args\s*=\s*.+$/m, desiredArgs)
+      : `${updated}${updated.endsWith(newline) ? '' : newline}${desiredArgs}`;
+  }
+  if (desiredTimeout && !timeoutReady) {
+    updated = timeout
+      ? updated.replace(/^startup_timeout_sec\s*=\s*.+$/m, desiredTimeout)
+      : `${updated}${updated.endsWith(newline) ? '' : newline}${desiredTimeout}`;
+  }
   fs.writeFileSync(
     configPath,
     original.slice(0, start) + updated + original.slice(end),

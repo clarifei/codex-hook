@@ -5,6 +5,7 @@ import {
   disableHeadroomBridge,
   ensureCodebaseMemory,
   ensureHeadroomBridge,
+  ensureMcpServer,
   ensureWigolo,
   headroomBridgeEnabled,
 } from './lib/config.ts';
@@ -267,6 +268,46 @@ base_url = "https://pool.afterinput.com"
   }
 });
 
+Deno.test('adds MCP startup budget only on Windows', () => {
+  const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
+  try {
+    const windowsConfig = path.join(directory, 'windows.toml');
+    Deno.writeTextFileSync(
+      windowsConfig,
+      `[mcp_servers.codebase-memory-mcp]
+command = "custom-code-memory"
+args = ["serve"]
+`,
+    );
+    assert(ensureMcpServer(
+      windowsConfig,
+      'codebase-memory-mcp',
+      'npx',
+      ['-y', 'codebase-memory-mcp'],
+      true,
+      'windows',
+    ));
+    assert(
+      !ensureMcpServer(
+        windowsConfig,
+        'codebase-memory-mcp',
+        'npx',
+        ['-y', 'codebase-memory-mcp'],
+        true,
+        'windows',
+      ),
+    );
+    assert.match(Deno.readTextFileSync(windowsConfig), /command = "custom-code-memory"/);
+    assert.match(Deno.readTextFileSync(windowsConfig), /^startup_timeout_sec = 120$/m);
+
+    const linuxConfig = path.join(directory, 'linux.toml');
+    assert(ensureMcpServer(linuxConfig, 'wigolo', 'npx', ['-y', 'wigolo'], false, 'linux'));
+    assert.doesNotMatch(Deno.readTextFileSync(linuxConfig), /startup_timeout_sec/);
+  } finally {
+    Deno.removeSync(directory, { recursive: true });
+  }
+});
+
 Deno.test('Headroom setup preserves existing provider header mappings', () => {
   const directory = Deno.makeTempDirSync({ prefix: 'codex-hook-' });
   const configPath = path.join(directory, 'config.toml');
@@ -288,6 +329,56 @@ env_http_headers = { "X-Custom" = "CUSTOM_TOKEN" }
   } finally {
     Deno.removeSync(directory, { recursive: true });
   }
+});
+
+Deno.test({
+  name: 'Headroom ensure launches a detached bridge on Windows',
+  ignore: Deno.build.os !== 'windows',
+  async fn() {
+    const listener = Deno.listen({ hostname: '127.0.0.1', port: 0 });
+    const bridgePort = (listener.addr as Deno.NetAddr).port;
+    listener.close();
+    const directory = Deno.makeTempDirSync({ prefix: 'codex-headroom-windows-' });
+    let bridgePid = 0;
+    Deno.mkdirSync(path.join(directory, '.codex-hook'));
+    Deno.writeTextFileSync(
+      path.join(directory, '.codex-hook', 'headroom-bridge.json'),
+      JSON.stringify({ upstream: 'https://pool.afterinput.com' }),
+    );
+    try {
+      const started = performance.now();
+      const result = await new Deno.Command(Deno.execPath(), {
+        args: [
+          'run',
+          '--quiet',
+          '--allow-env',
+          '--allow-net',
+          '--allow-read',
+          '--allow-run',
+          path.join(Deno.cwd(), 'hooks', 'headroom-bridge.ts'),
+          'ensure',
+        ],
+        env: {
+          CODEX_HOME: directory,
+          HEADROOM_BRIDGE_PORT: String(bridgePort),
+          HEADROOM_BRIDGE_START_HEADROOM: 'false',
+        },
+        stdin: 'null',
+        stdout: 'piped',
+        stderr: 'piped',
+      }).output();
+      const startupMs = performance.now() - started;
+      assert(result.success, new TextDecoder().decode(result.stderr));
+      const response = await fetch(`http://127.0.0.1:${bridgePort}/health`);
+      assert(response.ok);
+      bridgePid = Number((await response.json()).pid);
+      assert(bridgePid > 0);
+      assert(startupMs < 5_000, `Headroom ensure took ${Math.round(startupMs)}ms`);
+    } finally {
+      if (bridgePid) Deno.kill(bridgePid, 'SIGTERM');
+      Deno.removeSync(directory, { recursive: true });
+    }
+  },
 });
 
 Deno.test('compresses only Responses tool outputs and fails open', async () => {
@@ -462,6 +553,7 @@ Deno.test('bridge sends OAuth only to Afterinput', async () => {
     ]);
     assert.deepEqual(await (await fetch(`http://127.0.0.1:${bridgePort}/health`)).json(), {
       ok: true,
+      pid: bridge.pid,
       headroom: true,
       compressed: 1,
       headroomCalls: 1,

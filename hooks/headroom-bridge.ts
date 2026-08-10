@@ -1,5 +1,8 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read --allow-run
 
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { compressToolOutputs, projectFromHeaders } from './lib/headroom-bridge.ts';
 import { resolveExecutable } from './lib/executable.ts';
 
@@ -39,23 +42,30 @@ async function ensureBridge() {
     await startHeadroom();
     return;
   }
-  const command = [
-    Deno.execPath(),
-    'run',
-    '--quiet',
-    '--allow-env',
-    '--allow-net',
-    '--allow-read',
-    '--allow-run',
-    scriptPath(),
-    'serve',
-  ].map(shellQuote).join(' ');
-  await new Deno.Command(resolveExecutable('sh'), {
-    args: ['-c', `setsid ${command} </dev/null >/dev/null 2>&1 &`],
-    stdin: 'null',
-    stdout: 'null',
-    stderr: 'null',
-  }).output();
+  if (Deno.build.os === 'windows') {
+    await launchWindows(
+      Deno.execPath(),
+      `run --quiet --allow-env --allow-net --allow-read --allow-run "${scriptPath()}" serve`,
+    );
+  } else {
+    const command = [
+      Deno.execPath(),
+      'run',
+      '--quiet',
+      '--allow-env',
+      '--allow-net',
+      '--allow-read',
+      '--allow-run',
+      scriptPath(),
+      'serve',
+    ].map(shellQuote).join(' ');
+    await new Deno.Command('sh', {
+      args: ['-c', `setsid ${command} </dev/null >/dev/null 2>&1 &`],
+      stdin: 'null',
+      stdout: 'null',
+      stderr: 'null',
+    }).output();
+  }
 
   for (let attempt = 0; attempt < 20; attempt++) {
     if (await bridgeRunning()) return;
@@ -70,13 +80,15 @@ async function serve() {
   void startHeadroom();
 
   Deno.serve({ hostname: '127.0.0.1', port: bridgePort }, async (request) => {
-    if (new URL(request.url).pathname === '/health') {
-      return Response.json({ ok: true, headroom: await headroomRunning(), ...metrics });
+    const pathname = new URL(request.url).pathname;
+    if (pathname === '/ready') return Response.json({ ok: true });
+    if (pathname === '/health') {
+      return Response.json({ ok: true, pid: Deno.pid, headroom: await headroomRunning(), ...metrics });
     }
 
     metrics.requests++;
     const target = targetUrl(upstream, request.url);
-    const responses = request.method === 'POST' && isResponsesPath(new URL(request.url).pathname);
+    const responses = request.method === 'POST' && isResponsesPath(pathname);
     if (responses) {
       metrics.responses++;
       const raw = await request.text();
@@ -132,7 +144,8 @@ function isResponsesPath(pathname: string) {
 
 async function bridgeRunning() {
   try {
-    return (await fetch(`http://127.0.0.1:${bridgePort}/health`, { signal: AbortSignal.timeout(200) })).ok;
+    const endpoint = Deno.build.os === 'windows' ? 'ready' : 'health';
+    return (await fetch(`http://127.0.0.1:${bridgePort}/${endpoint}`, { signal: AbortSignal.timeout(200) })).ok;
   } catch {
     return false;
   }
@@ -150,6 +163,10 @@ async function startHeadroom() {
   if (Deno.env.get('HEADROOM_BRIDGE_START_HEADROOM') === 'false' || await headroomRunning()) return;
   const port = new URL(headroomUrl).port || '8787';
   try {
+    if (Deno.build.os === 'windows') {
+      await launchWindows(resolveExecutable('headroom'), `proxy --port ${port}`);
+      return;
+    }
     const child = new Deno.Command(resolveExecutable('headroom'), {
       args: ['proxy', '--port', port],
       stdin: 'null',
@@ -162,17 +179,38 @@ async function startHeadroom() {
   }
 }
 
+async function launchWindows(executable: string, argumentsValue: string) {
+  const launch = await new Deno.Command(resolveExecutable('powershell'), {
+    args: [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      'Start-Process -FilePath $env:CODEX_HOOK_EXECUTABLE -ArgumentList $env:CODEX_HOOK_ARGUMENTS -WindowStyle Hidden',
+    ],
+    env: {
+      CODEX_HOOK_ARGUMENTS: argumentsValue,
+      CODEX_HOOK_EXECUTABLE: executable,
+    },
+    stdin: 'null',
+    stdout: 'null',
+    stderr: 'piped',
+  }).output();
+  if (!launch.success) {
+    throw new Error(new TextDecoder().decode(launch.stderr).trim() || `Failed to launch ${executable}`);
+  }
+}
+
 async function readConfig(): Promise<BridgeConfig> {
-  const codexHome = Deno.env.get('CODEX_HOME') || `${Deno.env.get('HOME')}/.codex`;
+  const codexHome = Deno.env.get('CODEX_HOME') || path.join(os.homedir(), '.codex');
   try {
-    return JSON.parse(await Deno.readTextFile(`${codexHome}/.codex-hook/headroom-bridge.json`));
+    return JSON.parse(await Deno.readTextFile(path.join(codexHome, '.codex-hook', 'headroom-bridge.json')));
   } catch {
     return {};
   }
 }
 
 function scriptPath() {
-  return decodeURIComponent(new URL(import.meta.url).pathname);
+  return fileURLToPath(import.meta.url);
 }
 
 function shellQuote(value: string) {

@@ -12,6 +12,7 @@ const configPath = path.join(codexHome, 'config.toml');
 const files = [
   'hooks.json',
   'hooks/headroom-bridge.ts',
+  'hooks/lib/executable.ts',
   'hooks/lib/headroom-bridge.ts',
 ];
 
