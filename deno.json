@@ -13,6 +13,6 @@
     "headroom": "deno run --allow-env --allow-read --allow-write --allow-sys scripts/enable-headroom.ts",
     "install": "deno run -A scripts/install.ts",
     "test": "deno test -A scripts/install_test.ts",
-    "tui:smoke": "bun run scripts/tui-smoke.ts"
+    "tui:smoke": "deno run -A scripts/run-bun.ts scripts/tui-smoke.ts"
   }
 }
